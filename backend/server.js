@@ -1,12 +1,12 @@
 // backend/server.js
 
 require("dotenv").config(); // Load environment variables from .env file first
-console.log("Attempting to load environment variables..."); // Debug log
+console.log("Attempting to load environment variables...");
 console.log(
   "Loaded STRAVA_CLIENT_ID:",
   process.env.STRAVA_CLIENT_ID ? "Found" : "Missing!"
-); // Verify .env loading
-console.log("Loaded DB_USER:", process.env.DB_USER ? "Found" : "Missing!"); // Verify DB user is loaded
+);
+console.log("Loaded DB_USER:", process.env.DB_USER ? "Found" : "Missing!");
 
 const express = require("express");
 const cors = require("cors");
@@ -18,50 +18,56 @@ const port = process.env.PORT || 5001;
 
 // --- Middleware ---
 app.use(cors()); // Enable CORS for all routes
-app.use(express.json()); // Middleware to parse JSON request bodies
+app.use(express.json()); // Middleware to parse JSON request bodies - MUST BE BEFORE ROUTES USING req.body
 
 // --- Helper Functions ---
 
 /**
+ * Calculates average pace in minutes per kilometer.
+ */
+function calculatePaceMinPerKm(distanceMeters, movingTimeSeconds) {
+  if (
+    !distanceMeters ||
+    distanceMeters <= 0 ||
+    !movingTimeSeconds ||
+    movingTimeSeconds <= 0
+  )
+    return null;
+  try {
+    const distanceKm = distanceMeters / 1000;
+    if (distanceKm === 0) return null;
+    const paceSecondsPerKm = movingTimeSeconds / distanceKm;
+    const minutes = Math.floor(paceSecondsPerKm / 60);
+    const seconds = Math.round(paceSecondsPerKm % 60);
+    const formattedSeconds = seconds < 10 ? `0${seconds}` : seconds;
+    return `${minutes}:${formattedSeconds} /km`;
+  } catch (e) {
+    console.error("[calculatePaceMinPerKm] Error:", e);
+    return null;
+  }
+}
+
+/**
  * Refreshes the Strava access token for a given user.
- * Updates the database with the new tokens and expiry time.
- *
- * @param {number} userId The internal user ID from your 'users' table.
- * @returns {Promise<string>} The new, valid access token.
- * @throws {Error} If refreshing fails or user data is missing.
  */
 async function refreshStravaToken(userId) {
+  /* ... same as previous version ... */
   console.log(`[refreshStravaToken] Attempting for user ID: ${userId}`);
   const client = await db.pool.connect();
   try {
-    // 1. Get current refresh token
-    const tokenQuery = `
-            SELECT strava_refresh_token, strava_token_expires_at
-            FROM users
-            WHERE user_id = $1;
-        `;
+    const tokenQuery = `SELECT strava_refresh_token FROM users WHERE user_id = $1;`;
     const { rows } = await client.query(tokenQuery, [userId]);
-
-    if (rows.length === 0) {
-      throw new Error(`User not found for ID: ${userId}`);
-    }
-    if (!rows[0].strava_refresh_token) {
+    if (rows.length === 0) throw new Error(`User not found for ID: ${userId}`);
+    if (!rows[0].strava_refresh_token)
       throw new Error(`Missing refresh token for user ID: ${userId}`);
-    }
-
     const currentRefreshToken = rows[0].strava_refresh_token;
-
-    // 2. Call Strava OAuth token endpoint for refresh
-    const stravaClientId = process.env.STRAVA_CLIENT_ID;
-    const stravaClientSecret = process.env.STRAVA_CLIENT_SECRET;
+    const stravaClientId = process.env.STRAVA_CLIENT_ID,
+      stravaClientSecret = process.env.STRAVA_CLIENT_SECRET;
     const tokenUrl = "https://www.strava.com/oauth/token";
-
-    if (!stravaClientId || !stravaClientSecret) {
-      throw new Error("Strava client ID or secret missing in server config.");
-    }
-
+    if (!stravaClientId || !stravaClientSecret)
+      throw new Error("Strava client ID or secret missing.");
     console.log(
-      `[refreshStravaToken] Requesting refreshed tokens from Strava for user ID: ${userId}...`
+      `[refreshStravaToken] Requesting refresh from Strava for user ID: ${userId}...`
     );
     const refreshResponse = await axios.post(tokenUrl, null, {
       params: {
@@ -71,69 +77,47 @@ async function refreshStravaToken(userId) {
         refresh_token: currentRefreshToken,
       },
     });
-
     const {
       access_token,
       expires_at,
       refresh_token: newRefreshToken,
     } = refreshResponse.data;
-    console.log(
-      `[refreshStravaToken] Successfully refreshed for user ID: ${userId}. New expiry: ${new Date(
-        expires_at * 1000
-      )}`
-    );
-
-    // 3. Update the user's record in the database with new tokens
-    const updateQuery = `
-            UPDATE users
-            SET strava_access_token = $1,
-                strava_refresh_token = $2,
-                strava_token_expires_at = $3, -- Store as BIGINT (epoch seconds)
-                updated_at = NOW()
-            WHERE user_id = $4;
-        `;
+    console.log(`[refreshStravaToken] Success for user ID: ${userId}.`);
+    const updateQuery = `UPDATE users SET strava_access_token=$1, strava_refresh_token=$2, strava_token_expires_at=$3, updated_at=NOW() WHERE user_id=$4;`;
     await client.query(updateQuery, [
       access_token,
       newRefreshToken,
       expires_at,
       userId,
     ]);
-    console.log(
-      `[refreshStravaToken] Database updated with new tokens for user ID: ${userId}.`
-    );
-
-    return access_token; // Return the new access token
+    console.log(`[refreshStravaToken] DB updated for user ID: ${userId}.`);
+    return access_token;
   } catch (error) {
     console.error(
       `[refreshStravaToken] Error for user ID ${userId}:`,
-      error.response?.data || error.message
+      error.message
     );
-    // Decide how to handle specific errors, e.g., invalid refresh token means user needs to re-authenticate
-    if (error.response?.data?.message === "Invalid Refresh Token") {
-      console.error(
-        `[refreshStravaToken] User ${userId} has an invalid refresh token. Needs to re-authenticate.`
-      );
-      // Consider clearing tokens or marking the user account
-      // await client.query("UPDATE users SET strava_access_token=NULL, strava_refresh_token=NULL, strava_token_expires_at=NULL WHERE user_id=$1", [userId]);
-    }
-    // Re-throw a generic error or the specific one to be caught by the calling route handler
-    throw new Error(`Failed to refresh Strava token: ${error.message}`);
+    throw error;
   } finally {
-    client.release(); // Ensure client is always released
+    // Rethrow original error
+    client.release();
   }
 }
 
-// --- Authentication Middleware Placeholder ---
-// !! IMPORTANT !! Replace this with proper JWT/Session authentication for production.
-// This current implementation is INSECURE as user IDs can be easily spoofed.
+// --- Authentication Middleware (Corrected) ---
+// !! IMPORTANT !! Replace with proper JWT/Session authentication for production.
 const simpleAuthMiddleware = (req, res, next) => {
-  // Try header first, then body, then query param as examples
-  const userId =
-    req.headers["x-user-id"] || req.body.userId || req.query.userId;
+  // Safely access properties, default to undefined if parent object doesn't exist
+  const headerId = req.headers ? req.headers["x-user-id"] : undefined;
+  const bodyId = req.body ? req.body.userId : undefined; // Check req.body first
+  const queryId = req.query ? req.query.userId : undefined; // Check req.query first
+
+  // Determine userId using the safe values
+  const userId = headerId || bodyId || queryId;
+
+  // Update console log to use the safe variables
   console.log(
-    `[SimpleAuth] Received User ID via ${
-      req.headers["x-user-id"] ? "header" : req.body.userId ? "body" : "query"
-    }: ${userId}`
+    `[SimpleAuth] Checking request for User ID (Header: ${headerId}, Body: ${bodyId}, Query: ${queryId}) -> Found: ${userId}`
   );
 
   if (!userId) {
@@ -143,7 +127,6 @@ const simpleAuthMiddleware = (req, res, next) => {
       .json({ message: "User ID missing. Authentication required." });
   }
 
-  // Validate and attach user ID to request object
   const parsedUserId = parseInt(userId, 10);
   if (isNaN(parsedUserId)) {
     console.warn(`[SimpleAuth] Invalid User ID format received: ${userId}`);
@@ -154,6 +137,7 @@ const simpleAuthMiddleware = (req, res, next) => {
   console.log(`[SimpleAuth] Authenticated request for user ID: ${req.userId}`);
   next(); // Proceed to the next middleware or route handler
 };
+// --- End Authentication Middleware ---
 
 // --- Routes ---
 
@@ -162,111 +146,58 @@ app.get("/strava/authorize", (req, res) => {
   console.log("GET /strava/authorize route hit");
   const stravaClientId = process.env.STRAVA_CLIENT_ID;
   const stravaRedirectUri = process.env.STRAVA_REDIRECT_URI;
-
   if (!stravaClientId || !stravaRedirectUri) {
-    console.error(
-      "Strava Client ID or Redirect URI missing in .env for /strava/authorize"
-    );
-    return res
-      .status(500)
-      .send("Server configuration error: Strava credentials missing.");
+    console.error("[Authorize] Strava Client ID or Redirect URI missing");
+    return res.status(500).send("Server config error.");
   }
-
-  // Define the scopes your application needs
   const scope = "read_all,profile:read_all,activity:read_all";
   const authorizationUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaClientId}&redirect_uri=${encodeURIComponent(
     stravaRedirectUri
   )}&response_type=code&approval_prompt=auto&scope=${scope}`;
-
-  console.log(
-    `Redirecting user to Strava authorization URL: ${authorizationUrl}`
-  );
+  console.log(`[Authorize] Redirecting user to Strava`);
   res.redirect(authorizationUrl);
 });
 
-// Strava Token Exchange Route (Handles the callback from Strava)
+// Strava Token Exchange Route
 app.post("/strava/token", async (req, res) => {
+  /* ... same as previous version ... */
   const { code } = req.body;
-
   console.log("POST /strava/token route hit");
-
   if (!code) {
-    console.log("Authorization code missing in request to /strava/token");
-    return res.status(400).json({ message: "Authorization code is missing" });
+    console.log("[Token] Auth code missing");
+    return res.status(400).json({ message: "Auth code missing" });
   }
-
-  console.log("Received authorization code from frontend:", code);
-
-  const stravaClientId = process.env.STRAVA_CLIENT_ID;
-  const stravaClientSecret = process.env.STRAVA_CLIENT_SECRET;
-
+  const stravaClientId = process.env.STRAVA_CLIENT_ID,
+    stravaClientSecret = process.env.STRAVA_CLIENT_SECRET;
   if (!stravaClientId || !stravaClientSecret) {
-    console.error(
-      "Strava Client ID or Secret missing in .env for token exchange"
-    );
-    return res
-      .status(500)
-      .json({ message: "Server configuration error during token exchange." });
+    console.error("[Token] Strava config missing");
+    return res.status(500).json({ message: "Server config error." });
   }
-
-  const tokenUrl = "https://www.strava.com/oauth/token";
-  const tokenParams = {
-    client_id: stravaClientId,
-    client_secret: stravaClientSecret,
-    code: code,
-    grant_type: "authorization_code",
-  };
-
-  let client; // DB client, declared outside try for finally block
-
+  const tokenUrl = "https://www.strava.com/oauth/token",
+    tokenParams = {
+      client_id: stravaClientId,
+      client_secret: stravaClientSecret,
+      code: code,
+      grant_type: "authorization_code",
+    };
+  let client;
   try {
-    console.log("Requesting access tokens from Strava...");
-    // 1. Exchange code for tokens with Strava
     const response = await axios.post(tokenUrl, null, { params: tokenParams });
     const { access_token, refresh_token, expires_at, athlete } = response.data;
-
-    console.log("Successfully received tokens and athlete data from Strava.");
-    console.log("Strava Athlete ID:", athlete.id);
-    console.log("Access Token Expires At:", new Date(expires_at * 1000));
-
-    // 2. Database Interaction within a Transaction
+    console.log("[Token] Tokens received. Athlete ID:", athlete.id);
     client = await db.pool.connect();
-    console.log("Acquired DB client, beginning transaction...");
-
     try {
       await client.query("BEGIN");
-
-      // Check if user exists based on Strava ID
       const findUserQuery = "SELECT user_id FROM users WHERE strava_id = $1";
       const { rows } = await client.query(findUserQuery, [athlete.id]);
-      let userRecord; // Will hold the user data after insert/update
-
+      let userRecord;
       if (rows.length > 0) {
-        // User Exists: Update
-        const existingUserId = rows[0].user_id;
-        console.log(
-          `User found in DB (user_id: ${existingUserId}, strava_id: ${athlete.id}). Updating tokens and profile info.`
-        );
-        const updateUserQuery = `
-          UPDATE users
-          SET strava_access_token = $1,
-              strava_refresh_token = $2,
-              strava_token_expires_at = $3, -- Store as BIGINT (epoch seconds)
-              first_name = $4,
-              last_name = $5,
-              username = $6,
-              profile_picture_url = $7,
-              city = $8,
-              state = $9,
-              country = $10,
-              updated_at = NOW()
-          WHERE strava_id = $11
-          RETURNING user_id, strava_id, first_name, last_name, username, profile_picture_url, city, state, country;
-        `;
+        // Update
+        const updateUserQuery = `UPDATE users SET strava_access_token=$1, strava_refresh_token=$2, strava_token_expires_at=$3, first_name=$4, last_name=$5, username=$6, profile_picture_url=$7, city=$8, state=$9, country=$10, updated_at=NOW() WHERE strava_id=$11 RETURNING *;`;
         const updateValues = [
           access_token,
           refresh_token,
-          expires_at, // Raw epoch seconds
+          expires_at,
           athlete.firstname,
           athlete.lastname,
           athlete.username,
@@ -276,25 +207,11 @@ app.post("/strava/token", async (req, res) => {
           athlete.country,
           athlete.id,
         ];
-        const updatedResult = await client.query(updateUserQuery, updateValues);
-        userRecord = updatedResult.rows[0];
-        console.log(
-          `User record updated successfully (user_id: ${userRecord.user_id}).`
-        );
+        userRecord = (await client.query(updateUserQuery, updateValues))
+          .rows[0];
       } else {
-        // User Doesn't Exist: Insert
-        console.log(
-          `User not found in DB (strava_id: ${athlete.id}). Creating new user record.`
-        );
-        const insertUserQuery = `
-          INSERT INTO users (
-              strava_id, first_name, last_name, username, profile_picture_url,
-              city, state, country,
-              strava_access_token, strava_refresh_token, strava_token_expires_at -- Column is BIGINT
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) -- Pass raw epoch seconds for $11
-          RETURNING user_id, strava_id, first_name, last_name, username, profile_picture_url, city, state, country;
-        `;
+        // Insert
+        const insertUserQuery = `INSERT INTO users (strava_id, first_name, last_name, username, profile_picture_url, city, state, country, strava_access_token, strava_refresh_token, strava_token_expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *;`;
         const insertValues = [
           athlete.id,
           athlete.firstname,
@@ -306,28 +223,18 @@ app.post("/strava/token", async (req, res) => {
           athlete.country,
           access_token,
           refresh_token,
-          expires_at, // Raw epoch seconds
+          expires_at,
         ];
-        const insertedResult = await client.query(
-          insertUserQuery,
-          insertValues
-        );
-        userRecord = insertedResult.rows[0];
-        console.log(
-          `New user record created successfully (user_id: ${userRecord.user_id}).`
-        );
+        userRecord = (await client.query(insertUserQuery, insertValues))
+          .rows[0];
       }
-
       await client.query("COMMIT");
-      console.log("Transaction committed successfully.");
-
-      // Respond to frontend with essential data, INCLUDING appUserId
+      console.log("[Token] DB Commit OK. User ID:", userRecord.user_id);
       res.json({
-        message:
-          "Successfully authenticated with Strava and user data saved/updated!",
+        message: "Success",
         athlete: {
-          id: userRecord.strava_id, // Strava ID
-          appUserId: userRecord.user_id, // <<< Your internal App User ID
+          id: userRecord.strava_id,
+          appUserId: userRecord.user_id,
           username: userRecord.username,
           firstname: userRecord.first_name,
           lastname: userRecord.last_name,
@@ -339,247 +246,311 @@ app.post("/strava/token", async (req, res) => {
       });
     } catch (dbError) {
       await client.query("ROLLBACK");
-      console.error("Database transaction failed. Rolling back.", dbError);
-      // Re-throw to be caught by outer catch, more specific message
-      throw new Error(`Database operation failed: ${dbError.message}`);
+      throw dbError;
     } finally {
-      client.release(); // Release client back to pool
-      console.log("DB client released after transaction attempt.");
+      client.release();
     }
   } catch (error) {
-    // Catches errors from Strava API call, DB connection, or re-thrown DB errors
-    console.error(
-      "Error during Strava token exchange or DB operation:",
-      error.response?.data || error.message,
-      error.stack
-    );
-    res.status(500).json({
-      message:
-        "Failed to process Strava authentication due to an internal error.",
-      error_details: error.message, // Provide clearer error details
-    });
+    console.error("[Token] Error:", error.message);
+    if (client) client.release();
+    res.status(500).json({ message: "Failed.", error_details: error.message });
   }
 });
 
-// Route to fetch activities from Strava and store/update them in our DB
+// Sync activities from Strava
 app.post("/api/strava/sync", simpleAuthMiddleware, async (req, res) => {
-  const userId = req.userId; // Get user ID attached by middleware
-  console.log(`POST /api/strava/sync - Starting for user ID: ${userId}`);
-
-  let client; // DB client for this operation
-
+  /* ... same as previous version ... */
+  const userId = req.userId;
+  console.log(`POST /api/strava/sync - User: ${userId}`);
+  let client;
   try {
     client = await db.pool.connect();
-    console.log(`[Sync] Acquired DB client for user ID: ${userId}`);
-
-    // 1. Get User's Tokens and Expiry from DB
-    const userQuery = `
-            SELECT user_id, strava_access_token, strava_refresh_token, strava_token_expires_at
-            FROM users
-            WHERE user_id = $1;
-        `;
+    const userQuery = `SELECT user_id, strava_access_token, strava_refresh_token, strava_token_expires_at FROM users WHERE user_id = $1;`;
     const userResult = await client.query(userQuery, [userId]);
-
     if (userResult.rows.length === 0) {
-      console.warn(`[Sync] User not found in DB for ID: ${userId}`);
-      // Release client before sending response
       client.release();
       return res.status(404).json({ message: "User not found." });
     }
-
     let { strava_access_token, strava_refresh_token, strava_token_expires_at } =
       userResult.rows[0];
-
     if (!strava_access_token || !strava_refresh_token) {
-      console.warn(`[Sync] User ${userId} missing Strava tokens.`);
       client.release();
-      return res.status(401).json({
-        message: "User not fully authenticated with Strava. Please reconnect.",
-      });
+      return res.status(401).json({ message: "User not fully authenticated." });
     }
-
-    // 2. Check if Access Token is Expired and Refresh if Needed
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    const bufferSeconds = 300; // 5-minute buffer before actual expiry
-
+    const nowSeconds = Math.floor(Date.now() / 1000),
+      bufferSeconds = 300;
     if (strava_token_expires_at <= nowSeconds + bufferSeconds) {
-      // Check against future expiry
-      console.log(
-        `[Sync] Token expired or nearing expiry for user ID: ${userId}. Refreshing...`
-      );
       try {
-        // refreshStravaToken handles DB update internally
         strava_access_token = await refreshStravaToken(userId);
       } catch (refreshError) {
-        console.error(
-          `[Sync] Token refresh failed for user ${userId}:`,
-          refreshError
-        );
         client.release();
-        return res.status(401).json({
-          message:
-            "Failed to refresh Strava token. Please try reconnecting Strava.",
-          error: refreshError.message, // Pass refresh error message
-        });
+        return res
+          .status(401)
+          .json({
+            message: "Failed to refresh token.",
+            error: refreshError.message,
+          });
       }
-    } else {
-      console.log(`[Sync] Token is valid for user ID: ${userId}.`);
     }
-
-    // 3. Fetch Recent Activities from Strava API using the valid token
-    const stravaActivitiesUrl =
-      "https://www.strava.com/api/v3/athlete/activities";
-    const activitiesPerPage = 50; // Adjust as needed, max 200 for Strava
-    let page = 1;
-    let allActivities = [];
-    let activitiesFetchedInThisPage;
-
-    console.log(
-      `[Sync] Fetching Strava activities page ${page} for user ID: ${userId}...`
-    );
-    // Fetching only the first page for simplicity now. Implement pagination loop if needed.
-    const stravaResponse = await axios.get(stravaActivitiesUrl, {
+    const stravaApiUrl = "https://www.strava.com/api/v3/athlete/activities";
+    const stravaResponse = await axios.get(stravaApiUrl, {
       headers: { Authorization: `Bearer ${strava_access_token}` },
-      params: {
-        page: page,
-        per_page: activitiesPerPage,
-        // Optional: Fetch activities after the last stored activity's start_date
-        // after: lastSyncTimestamp
-      },
+      params: { page: 1, per_page: 50 },
     });
-
-    activitiesFetchedInThisPage = stravaResponse.data;
-    allActivities = allActivities.concat(activitiesFetchedInThisPage);
-    console.log(
-      `[Sync] Fetched ${activitiesFetchedInThisPage.length} activities from Strava.`
-    );
-
-    if (allActivities.length === 0) {
-      console.log(
-        `[Sync] No new activities found on Strava for user ID: ${userId}.`
-      );
+    const activities = stravaResponse.data || [];
+    if (activities.length === 0) {
       client.release();
-      return res.status(200).json({
-        message: "No new Strava activities found.",
-        activitiesStored: 0,
-      });
+      return res
+        .status(200)
+        .json({ message: "No new activities on Strava.", activitiesStored: 0 });
     }
-
-    // 4. Store/Update Activities in Database (Upsert within Transaction)
-    let activitiesStoredCount = 0;
+    let count = 0;
     try {
-      await client.query("BEGIN"); // Start transaction
-
-      for (const activity of allActivities) {
-        // Optional: Filter for specific types like 'Run'
-        // if (activity.type !== 'Run') continue;
-
-        const insertQuery = `
-                  INSERT INTO activities (
-                      user_id, strava_activity_id, name, distance, moving_time,
-                      elapsed_time, total_elevation_gain, type, start_date,
-                      start_date_local, timezone, average_speed, max_speed,
-                      average_heartrate, max_heartrate
-                  )
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                  ON CONFLICT (strava_activity_id) DO UPDATE SET
-                      name = EXCLUDED.name,
-                      distance = EXCLUDED.distance,
-                      moving_time = EXCLUDED.moving_time,
-                      elapsed_time = EXCLUDED.elapsed_time,
-                      total_elevation_gain = EXCLUDED.total_elevation_gain,
-                      type = EXCLUDED.type,
-                      start_date = EXCLUDED.start_date,
-                      start_date_local = EXCLUDED.start_date_local,
-                      timezone = EXCLUDED.timezone,
-                      average_speed = EXCLUDED.average_speed,
-                      max_speed = EXCLUDED.max_speed,
-                      average_heartrate = EXCLUDED.average_heartrate,
-                      max_heartrate = EXCLUDED.max_heartrate,
-                      updated_at = NOW(); -- Important: Update timestamp on conflict update
-                `;
+      await client.query("BEGIN");
+      for (const act of activities) {
+        const query = `INSERT INTO activities (user_id, strava_activity_id, name, distance, moving_time, elapsed_time, total_elevation_gain, type, start_date, start_date_local, timezone, average_speed, max_speed, average_heartrate, max_heartrate) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (strava_activity_id) DO UPDATE SET name=EXCLUDED.name, distance=EXCLUDED.distance, moving_time=EXCLUDED.moving_time, elapsed_time=EXCLUDED.elapsed_time, total_elevation_gain=EXCLUDED.total_elevation_gain, type=EXCLUDED.type, start_date=EXCLUDED.start_date, start_date_local=EXCLUDED.start_date_local, timezone=EXCLUDED.timezone, average_speed=EXCLUDED.average_speed, max_speed=EXCLUDED.max_speed, average_heartrate=EXCLUDED.average_heartrate, max_heartrate=EXCLUDED.max_heartrate, updated_at=NOW();`;
         const values = [
           userId,
-          activity.id,
-          activity.name || "Unnamed Activity", // Handle potential null names
-          activity.distance,
-          activity.moving_time,
-          activity.elapsed_time,
-          activity.total_elevation_gain,
-          activity.type,
-          activity.start_date,
-          activity.start_date_local,
-          activity.timezone,
-          activity.average_speed,
-          activity.max_speed,
-          activity.average_heartrate,
-          activity.max_heartrate,
+          act.id,
+          act.name || "Unnamed",
+          act.distance,
+          act.moving_time,
+          act.elapsed_time,
+          act.total_elevation_gain,
+          act.type,
+          act.start_date,
+          act.start_date_local,
+          act.timezone,
+          act.average_speed,
+          act.max_speed,
+          act.average_heartrate,
+          act.max_heartrate,
         ];
-
-        const result = await client.query(insertQuery, values);
-        // rowCount tells if INSERT or UPDATE happened
-        if (result.rowCount > 0) {
-          activitiesStoredCount++;
-        }
+        if ((await client.query(query, values)).rowCount > 0) count++;
       }
-
-      await client.query("COMMIT"); // Commit transaction
+      await client.query("COMMIT");
       console.log(
-        `[Sync] Transaction committed. Stored/Updated ${activitiesStoredCount} activities for user ID: ${userId}.`
+        `[Sync] DB Commit OK for user ${userId}. Processed: ${count}`
       );
-      res.status(200).json({
-        message: `Successfully synced ${activitiesStoredCount} activities.`,
-        activitiesStored: activitiesStoredCount,
-      });
+      res
+        .status(200)
+        .json({
+          message: `Synced ${count} activities.`,
+          activitiesStored: count,
+        });
     } catch (dbError) {
       await client.query("ROLLBACK");
-      console.error(
-        `[Sync] Database error during activity storage for user ${userId}. Rolling back.`,
-        dbError
-      );
-      res.status(500).json({
-        message: "Database error during activity sync.",
-        error: dbError.message,
-      });
+      throw dbError;
     } finally {
-      // Ensure client is released if DB transaction block finishes (success or error)
       client.release();
-      console.log(
-        `[Sync] DB client released after storage attempt for user ID: ${userId}.`
-      );
     }
   } catch (error) {
-    // Catch errors from steps before DB transaction (getting user, token check, Strava API call)
-    console.error(
-      `[Sync] Error for user ID ${userId}:`,
-      error.response?.data || error.message,
-      error.stack
-    );
-    // Ensure client is released if acquired before the error occurred
-    if (client) {
-      client.release();
-      console.log(
-        `[Sync] DB client released after error for user ID: ${userId}.`
-      );
-    }
-
-    if (error.response?.status === 401) {
-      // Unauthorized from Strava API call
-      res.status(401).json({
-        message:
-          "Strava authorization failed (API call). Please try reconnecting Strava.",
-        error: error.response?.data || error.message,
-      });
-    } else {
-      res.status(500).json({
-        message: "Failed to sync Strava activities due to an internal error.",
-        error: error.message,
-      });
-    }
+    console.error(`[Sync] Error for user ${userId}:`, error.message);
+    if (client) client.release();
+    res.status(500).json({ message: "Failed sync.", error: error.message });
   }
 });
 
-// Basic root route (Good for health checks)
+// GET stored activities from our database
+app.get("/api/activities", simpleAuthMiddleware, async (req, res) => {
+  const userId = req.userId;
+  console.log(`GET /api/activities - User: ${userId}`);
+  try {
+    const query = `SELECT activity_id, strava_activity_id, name, distance, moving_time, elapsed_time, total_elevation_gain, type, start_date_local, timezone, average_speed, max_speed, average_heartrate, max_heartrate, mental_mood, mental_focus, mental_stress, mental_notes FROM activities WHERE user_id = $1 ORDER BY start_date_local DESC;`;
+    const { rows } = await db.query(query, [userId]);
+    const activitiesFormatted = rows.map((act) => ({
+      ...act,
+      distance_km: act.distance ? (act.distance / 1000).toFixed(2) : "0.00",
+      moving_time_formatted: act.moving_time
+        ? new Date(act.moving_time * 1000).toISOString().slice(11, 19)
+        : "00:00:00",
+      pace_per_km: calculatePaceMinPerKm(act.distance, act.moving_time),
+      mental_mood: act.mental_mood ?? null,
+      mental_focus: act.mental_focus ?? null,
+      mental_stress: act.mental_stress ?? null,
+      mental_notes: act.mental_notes ?? null,
+    }));
+    res.status(200).json(activitiesFormatted);
+  } catch (error) {
+    console.error(`[Activities GET] Error user ${userId}:`, error);
+    res.status(500).json({ message: "Failed fetch.", error: error.message });
+  }
+});
+
+// POST mental state for a specific activity
+app.post(
+  "/api/activities/:activityId/mental_state",
+  simpleAuthMiddleware,
+  async (req, res) => {
+    const userId = req.userId;
+    const { activityId } = req.params;
+    const { mood, focus, stress, notes } = req.body;
+    console.log(
+      `POST /api/activities/${activityId}/mental_state - User: ${userId}, Data:`,
+      req.body
+    );
+    const activityIdInt = parseInt(activityId, 10);
+    if (isNaN(activityIdInt))
+      return res.status(400).json({ message: "Invalid Activity ID." });
+    const isValidScale = (v) =>
+      v === null ||
+      v === undefined ||
+      (Number.isInteger(v) && v >= 1 && v <= 5);
+    if (!isValidScale(mood) || !isValidScale(focus) || !isValidScale(stress))
+      return res
+        .status(400)
+        .json({ message: "Invalid scale value (1-5 or null)." });
+    try {
+      const query = `UPDATE activities SET mental_mood=$1, mental_focus=$2, mental_stress=$3, mental_notes=$4, updated_at=NOW() WHERE activity_id=$5 AND user_id=$6 RETURNING activity_id, mental_mood, mental_focus, mental_stress, mental_notes;`;
+      const values = [
+        mood ?? null,
+        focus ?? null,
+        stress ?? null,
+        notes ?? null,
+        activityIdInt,
+        userId,
+      ];
+      const { rows, rowCount } = await db.query(query, values);
+      if (rowCount === 0) {
+        const check = await db.query(
+          "SELECT 1 FROM activities WHERE activity_id=$1",
+          [activityIdInt]
+        );
+        return res
+          .status(check.rowCount === 0 ? 404 : 403)
+          .json({
+            message:
+              check.rowCount === 0
+                ? "Activity not found."
+                : "Permission denied.",
+          });
+      }
+      console.log(
+        `[Mental State] Updated OK for Activity: ${activityIdInt}, User: ${userId}`
+      );
+      res.status(200).json({ message: "Updated.", updatedState: rows[0] });
+    } catch (error) {
+      console.error(
+        `[Mental State] Error user ${userId}, activity ${activityIdInt}:`,
+        error
+      );
+      res.status(500).json({ message: "Failed update.", error: error.message });
+    }
+  }
+);
+
+// GET calculated insights
+app.get("/api/insights", simpleAuthMiddleware, async (req, res) => {
+  const userId = req.userId;
+  console.log(`GET /api/insights - User: ${userId}`);
+  try {
+    const query = `SELECT distance, moving_time, average_heartrate, start_date_local, mental_mood FROM activities WHERE user_id = $1 AND type = 'Run' ORDER BY start_date_local DESC LIMIT 10;`;
+    const { rows: runs } = await db.query(query, [userId]);
+    if (runs.length < 2)
+      return res
+        .status(200)
+        .json({ insights: ["Log more runs for insights!"] });
+
+    const insights = [];
+    const last = runs[0];
+    const prev = runs.slice(1);
+    const avgP = prev.reduce(
+      (a, r) => {
+        /* ... calculate averages (distance, hr, paceSeconds) ... */
+        a.d += r.distance || 0;
+        a.t += r.moving_time || 0;
+        a.h += r.average_heartrate || 0;
+        a.c++;
+        const p = calculatePaceMinPerKm(r.distance, r.moving_time);
+        if (p) {
+          try {
+            const ps =
+              parseInt(p.split(":")[0]) * 60 + parseInt(p.split(":")[1]);
+            a.ps += ps;
+            a.pc++;
+          } catch {}
+        }
+        return a;
+      },
+      { d: 0, t: 0, h: 0, c: 0, ps: 0, pc: 0 }
+    );
+    const avgD = avgP.c ? avgP.d / avgP.c : 0,
+      avgH = avgP.c ? avgP.h / avgP.c : 0,
+      avgPS = avgP.pc ? avgP.ps / avgP.pc : 0;
+    let avgPF = null;
+    if (avgPS > 0) {
+      const m = Math.floor(avgPS / 60),
+        s = Math.round(avgPS % 60);
+      avgPF = `${m}:${s < 10 ? "0" + s : s} /km`;
+    }
+    const lastP = calculatePaceMinPerKm(last.distance, last.moving_time);
+    let lastPS = null;
+    if (lastP) {
+      try {
+        lastPS =
+          parseInt(lastP.split(":")[0]) * 60 + parseInt(lastP.split(":")[1]);
+      } catch {}
+    }
+
+    // Generate insights (Pace, Distance, Recovery, Mind-Body)
+    if (lastP && avgPF && lastPS && avgPS > 0) {
+      const d = lastPS - avgPS;
+      if (d < -10)
+        insights.push(`🚀 Pace: Faster (${lastP}) than avg (${avgPF}).`);
+      else if (d > 10)
+        insights.push(`📉 Pace: Slower (${lastP}) than avg (${avgPF}).`);
+    }
+    if (last.distance && avgD > 0) {
+      const dP = ((last.distance - avgD) / avgD) * 100;
+      if (dP > 25)
+        insights.push(
+          `🏃 Distance: Longer (${(last.distance / 1000).toFixed(
+            1
+          )}km) than avg (${(avgD / 1000).toFixed(1)}km).`
+        );
+      else if (dP < -25)
+        insights.push(
+          ` Short (${(last.distance / 1000).toFixed(1)}km) vs avg (${(
+            avgD / 1000
+          ).toFixed(1)}km).`
+        );
+    }
+    const isLong = last.distance > avgD * 1.3,
+      isHighH =
+        last.average_heartrate &&
+        avgH > 0 &&
+        last.average_heartrate > avgH * 1.05;
+    if (isLong && isHighH)
+      insights.push(
+        `🥵 Recovery: High effort & long run. Prioritize recovery.`
+      );
+    else if (isLong) insights.push(`👍 Recovery: Long run. Recover well.`);
+    else if (isHighH)
+      insights.push(`💓 Recovery: HR higher than usual. Listen to body.`);
+    if (last.mental_mood && lastPS && avgPS > 0) {
+      if (last.mental_mood >= 4 && lastPS < avgPS * 0.98)
+        insights.push(
+          `✨ Mind-Body: High mood (${last.mental_mood}/5) & faster pace!`
+        );
+      else if (last.mental_mood <= 2 && lastPS > avgPS * 1.02)
+        insights.push(
+          `🤔 Mind-Body: Lower mood (${last.mental_mood}/5) & slower pace.`
+        );
+    }
+    if (insights.length === 0)
+      insights.push("Keep logging runs & mood for more insights!");
+
+    console.log(`[Insights] Generated ${insights.length} for user: ${userId}`);
+    res.status(200).json({ insights });
+  } catch (error) {
+    console.error(`[Insights] Error user ${userId}:`, error);
+    res
+      .status(500)
+      .json({ message: "Failed insight gen.", error: error.message });
+  }
+});
+
+// Basic root route
 app.get("/", (req, res) => {
   console.log("GET / route hit");
   res.send("RunMind Backend is running and accessible!");
@@ -588,31 +559,19 @@ app.get("/", (req, res) => {
 // --- Start Server ---
 app.listen(port, () => {
   console.log(`Backend server listening on http://localhost:${port}`);
-  // Verify DB connection is attempted when pool is created (from db.js)
 });
 
 // --- Graceful Shutdown Handling ---
-process.on("SIGINT", async () => {
-  console.log("\nSIGINT signal received: closing HTTP server and DB pool...");
-  // Add server.close() logic here if needed, requires access to the server instance
-  // e.g., const server = app.listen(...) then server.close(...)
-  try {
-    await db.pool.end(); // Close all connections in the pool
-    console.log("DB pool closed successfully.");
-  } catch (err) {
-    console.error("Error closing DB pool:", err);
-  }
-  process.exit(0); // Exit process
-});
-
-process.on("SIGTERM", async () => {
-  console.log("\nSIGTERM signal received: closing HTTP server and DB pool...");
-  // Add server.close() logic here if needed
+const shutdown = async (signal) => {
+  console.log(`\n${signal} received: closing server & DB pool...`);
   try {
     await db.pool.end();
-    console.log("DB pool closed successfully.");
+    console.log("DB pool closed.");
+    process.exit(0);
   } catch (err) {
     console.error("Error closing DB pool:", err);
+    process.exit(1);
   }
-  process.exit(0);
-});
+};
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
