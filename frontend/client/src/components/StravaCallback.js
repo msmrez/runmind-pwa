@@ -9,72 +9,109 @@ const StravaCallback = () => {
   const code = searchParams.get("code");
   const error = searchParams.get("error");
   const [status, setStatus] = useState("Processing Strava callback...");
-  const [athleteData, setAthleteData] = useState(null); // Can still store full data for display
+  const [athleteData, setAthleteData] = useState(null);
   const processingRef = useRef(false);
 
   useEffect(() => {
+    console.log("[StravaCallback] useEffect running.");
     if (error) {
       console.error("[StravaCallback] Strava authorization error:", error);
-      setStatus(
-        `Error during Strava authorization: ${error}. Please try again.`
-      );
+      setStatus(`Error: ${error}. Please try again.`);
       processingRef.current = false;
       return;
     }
 
     if (code && !processingRef.current) {
-      processingRef.current = true;
-      console.log("[StravaCallback] Authorization Code from Strava:", code);
+      processingRef.current = true; // Mark as processing *once*
+      console.log("[StravaCallback] Authorization Code found:", code);
       setStatus("Exchanging code for tokens...");
 
       const backendUrl =
         process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
+      console.log(
+        `[StravaCallback] POSTing code to ${backendUrl}/strava/token`
+      );
 
       axios
         .post(`${backendUrl}/strava/token`, { code })
         .then((response) => {
-          console.log("[StravaCallback] Backend response:", response.data);
+          console.log(
+            "[StravaCallback] Backend response successful:",
+            response.data
+          );
 
-          // --- Crucial Check ---
           if (
             response.data &&
             response.data.athlete &&
             response.data.athlete.appUserId
           ) {
             setStatus("Strava authentication successful!");
-            setAthleteData(response.data.athlete); // Store the received athlete data
+            setAthleteData(response.data.athlete); // For potential display
 
-            // --- Store in localStorage ---
-            // Ensure the object you store contains appUserId
+            // --- Log Before Storing ---
+            const dataToStore = response.data.athlete;
             console.log(
-              "[StravaCallback] Storing athlete data to localStorage:",
-              response.data.athlete
+              "%c[StravaCallback] Storing athlete data to localStorage:",
+              "color: green; font-weight: bold;",
+              dataToStore
             );
-            localStorage.setItem(
-              "stravaAthlete",
-              JSON.stringify(response.data.athlete) // Store the whole athlete object from backend
-            );
-            // --- End Store ---
+            // --- Check for appUserId specifically ---
+            if (!dataToStore.appUserId) {
+              console.error(
+                "%c[StravaCallback] CRITICAL: appUserId is MISSING in data from backend!",
+                "color: red; font-weight: bold;",
+                dataToStore
+              );
+              setStatus(
+                "Authentication Error: Missing critical user ID from backend."
+              );
+              processingRef.current = false; // Allow retry potentially
+              return; // Stop further processing
+            }
 
-            // Redirect to dashboard after successful authentication and storage
-            console.log("[StravaCallback] Navigating to dashboard...");
-            navigate("/dashboard"); // Redirect immediately on success
+            try {
+              localStorage.setItem(
+                "stravaAthlete",
+                JSON.stringify(dataToStore)
+              );
+              // --- Log After Storing (Optional: Read back to verify) ---
+              const storedValue = localStorage.getItem("stravaAthlete");
+              console.log(
+                "%c[StravaCallback] Value verified in localStorage:",
+                "color: green;",
+                storedValue
+              );
+
+              // Redirect to dashboard only after successful storage
+              console.log(
+                "[StravaCallback] Storage successful. Navigating to dashboard..."
+              );
+              navigate("/dashboard", { replace: true }); // Use replace to avoid callback in history
+            } catch (storageError) {
+              console.error(
+                "%c[StravaCallback] Error saving to localStorage:",
+                "color: red;",
+                storageError
+              );
+              setStatus("Failed to save session. Please try again.");
+              processingRef.current = false; // Allow retry
+            }
           } else {
-            // Handle case where backend response is missing expected data
             console.error(
-              "[StravaCallback] Backend response missing athlete data or appUserId:",
+              "%c[StravaCallback] Backend response missing athlete data or appUserId:",
+              "color: red; font-weight: bold;",
               response.data
             );
             setStatus(
-              "Authentication succeeded but failed to retrieve necessary user details from backend."
+              "Authentication Error: Invalid data received from backend."
             );
-            processingRef.current = false; // Allow retry potentially?
-            localStorage.removeItem("stravaAthlete"); // Clear any partial data
+            processingRef.current = false;
+            localStorage.removeItem("stravaAthlete");
           }
         })
         .catch((err) => {
           console.error(
-            "[StravaCallback] Error sending code to backend:",
+            "[StravaCallback] Error POSTing code to backend:",
             err.response ? err.response.data : err.message
           );
           setStatus(
@@ -85,23 +122,18 @@ const StravaCallback = () => {
           processingRef.current = false;
           localStorage.removeItem("stravaAthlete");
         });
-    } else if (!code && !error) {
-      setStatus("Waiting for Strava authorization code...");
+    } else if (!code && !error && !processingRef.current) {
+      // Avoid logging if already processing
+      console.log("[StravaCallback] No code or error found in URL params yet.");
+      setStatus("Waiting for Strava authorization...");
     }
-  }, [code, error, navigate]);
+  }, [code, error, navigate]); // Dependencies
 
   return (
     <div>
       <h1>Strava Authentication</h1>
       <p>{status}</p>
-      {/* Display details if needed, but primary goal is storage and redirect */}
-      {athleteData && (
-        <div>
-          <h2>Welcome, {athleteData.firstname}!</h2>
-          <p>Redirecting to dashboard...</p>
-          {/* You might not even see this if the redirect is fast enough */}
-        </div>
-      )}
+      {athleteData && <p>Redirecting...</p>}
     </div>
   );
 };

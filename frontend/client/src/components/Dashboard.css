@@ -1,0 +1,124 @@
+/* src/components/Dashboard.css */
+
+.dashboard-container {
+  padding: 15px;
+  max-width: 1200px; /* Limit width on large screens */
+  margin: 0 auto; /* Center container */
+}
+
+.dashboard-header {
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.sync-button {
+  padding: 8px 15px;
+  background-color: #fc5200; /* Strava-like orange */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95em;
+  transition: background-color 0.2s ease;
+}
+
+.sync-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.sync-button:hover:not(:disabled) {
+  background-color: #d44600;
+}
+
+.sync-status {
+  font-style: italic;
+  color: #555;
+  margin-top: 10px;
+}
+
+.dashboard-card {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 15px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.insights-card h4 {
+  margin-top: 0;
+  color: #3498db; /* Blue heading for insights */
+}
+
+.insights-list {
+  padding-left: 20px;
+  margin: 0;
+  list-style: disc; /* Use standard bullets */
+}
+.insights-list li {
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.activities-card h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+.error-text {
+  color: #e74c3c; /* Red for errors */
+  font-weight: bold;
+}
+
+/* Make table scrollable on smaller screens */
+.activity-table-container {
+  overflow-x: auto;
+}
+
+.activity-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.activity-table th,
+.activity-table td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top; /* Align content to top */
+  border-bottom: 1px solid #eee;
+}
+
+.activity-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  white-space: nowrap; /* Prevent headers from wrapping */
+}
+
+.activity-table tr:last-child td {
+  border-bottom: none; /* Remove border on last row */
+}
+
+.mental-state-cell div {
+  white-space: nowrap;
+  margin-bottom: 3px;
+}
+.notes-text {
+  font-size: 0.9em;
+  color: #555;
+  margin-top: 3px;
+  word-break: break-word; /* Allow notes to wrap */
+  white-space: normal !important;
+}
+.no-log-text {
+  color: #888;
+  font-size: 0.9em;
+}
+
+/* Style for the nested MentalStateLogger component inputs/buttons if needed */
+.mental-state-cell button {
+  font-size: 0.8em !important; /* Smaller button in table */
+  padding: 2px 5px !important;
+}
