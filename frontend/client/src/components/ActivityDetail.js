@@ -1,11 +1,10 @@
 // src/components/ActivityDetail.js
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom"; // Import Link for back navigation
-import axios from "axios";
+//import axios from "axios";
+import apiClient from "../api"; // <<< Import the configured instance
 import MentalStateLogger from "./MentalStateLogger";
-// Import the MentalStateLogger - assuming it might be slightly adjusted or reused
-// If MentalStateLogger is tightly coupled to the Dashboard table, you might need
-// to extract it into its own file or duplicate/modify its logic here.
+
 // Let's assume we can reuse it for now.
 const ActivityDetail = () => {
   // Get the activityId from the URL parameter (defined in App.js route)
@@ -51,14 +50,7 @@ const ActivityDetail = () => {
         `[ActivityDetail] Fetching activity ${activityId} for user ${userInfo.appUserId}`
       );
       try {
-        const backendUrl =
-          process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
-        const response = await axios.get(
-          `${backendUrl}/api/activities/${activityId}`,
-          {
-            headers: { "X-User-ID": userInfo.appUserId }, // Send auth
-          }
-        );
+        const response = await apiClient.get(`/api/activities/${activityId}`);
         setActivity(response.data);
       } catch (err) {
         console.error(

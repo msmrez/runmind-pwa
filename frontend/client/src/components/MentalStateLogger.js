@@ -1,7 +1,6 @@
 // src/components/MentalStateLogger.js
 import React, { useState, useEffect } from "react";
-import axios from "axios"; // Now used in handleSave
-
+import apiClient from "../api";
 const MentalStateLogger = ({ activity, onSave, userId }) => {
   const [isLogging, setIsLogging] = useState(false);
   // State for the form inputs, initialized from the activity prop or empty string
@@ -78,12 +77,9 @@ const MentalStateLogger = ({ activity, onSave, userId }) => {
       dataToSend
     );
     try {
-      const backendUrl =
-        process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
-      const response = await axios.post(
-        `${backendUrl}/api/activities/${activity.activity_id}/mental_state`,
-        dataToSend,
-        { headers: { "X-User-ID": userId } }
+      const response = await apiClient.post(
+        `/api/activities/${activity.activity_id}/mental_state`,
+        dataToSend
       );
       console.log(
         `%c[MSL Activity ${activity.activity_id}] Save response:`,

@@ -1,0 +1,28 @@
+backend/
+├── node_modules/
+├── routes/             <-- For route definitions
+│   ├── activities.js
+│   ├── auth.js
+│   ├── diary.js
+│   ├── diet.js
+│   ├── goals.js
+│   ├── insights.js
+│   └── strava.js
+├── controllers/        <-- For route handler logic
+│   ├── activityController.js
+│   ├── authController.js
+│   ├── diaryController.js
+│   ├── dietController.js
+│   ├── goalController.js
+│   ├── insightController.js
+│   └── stravaController.js
+├── middleware/         <-- For middleware functions
+│   └── authenticateToken.js
+├── services/           <-- For business logic, helpers
+│   ├── analyticsService.js
+│   └── stravaService.js
+├── .env
+├── db.js
+├── package.json
+├── package-lock.json
+└── server.js           <-- Core server setup & mounting routes

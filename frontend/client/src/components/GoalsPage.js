@@ -1,7 +1,6 @@
 // src/components/GoalsPage.js
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
-
+import apiClient from "../api";
 // Helper to get dates for default start/end
 const getWeekStartDate = (date = new Date()) => {
   const d = new Date(date);
@@ -87,11 +86,7 @@ const GoalForm = ({ userId, onGoalAdded }) => {
       name: name.trim() || null,
     };
     try {
-      const backendUrl =
-        process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
-      const response = await axios.post(`${backendUrl}/api/goals`, goalData, {
-        headers: { "X-User-ID": userId },
-      });
+      const response = await apiClient.post("/api/goals", goalData);
       onGoalAdded(response.data);
       resetForm();
     } catch (err) {
@@ -203,12 +198,9 @@ const GoalItem = ({ goal, userId, onGoalDeleted, onGoalStatusChanged }) => {
       return;
     setIsUpdatingStatus(true);
     try {
-      const backendUrl =
-        process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
-      const response = await axios.put(
-        `${backendUrl}/api/goals/${goal.goal_id}/status`,
-        { status: newStatus },
-        { headers: { "X-User-ID": userId } }
+      const response = await apiClient.put(
+        `/api/goals/${goal.goal_id}/status`,
+        { status: newStatus }
       );
       onGoalStatusChanged(response.data);
     } catch (err) {
@@ -225,11 +217,7 @@ const GoalItem = ({ goal, userId, onGoalDeleted, onGoalStatusChanged }) => {
       return;
     setIsDeleting(true);
     try {
-      const backendUrl =
-        process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
-      await axios.delete(`${backendUrl}/api/goals/${goal.goal_id}`, {
-        headers: { "X-User-ID": userId },
-      });
+      await apiClient.delete(`/api/goals/${goal.goal_id}`);
       onGoalDeleted(goal.goal_id);
     } catch (err) {
       console.error("Failed delete:", err);
@@ -423,13 +411,8 @@ const GoalsPage = () => {
     // Do NOT reset goals here immediately, only on success/error inside try/catch
 
     try {
-      const backendUrl =
-        process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
       const params = filter === "all" ? {} : { status: filter };
-      const response = await axios.get(`${backendUrl}/api/goals`, {
-        headers: { "X-User-ID": userInfo.appUserId },
-        params: params,
-      });
+      const response = await apiClient.get("/api/goals", { params: params });
       console.log("[fetchGoals] SUCCESS. Received data:", response.data);
       setGoals(response.data || []); // <<< Set goals on SUCCESS
     } catch (err) {

@@ -1,0 +1,170 @@
+Project Snapshot - RunMind (End of Sprint 14 - Auth Complete)
+
+Backend Structure:
+
+Refactored backend into routes, controllers, middleware, services directories.
+
+Core server.js sets up Express, middleware, mounts routers, includes global error handler.
+
+db.js handles PostgreSQL connection pool.
+
+.env file used for secrets (DB credentials, Strava keys, JWT_SECRET).
+
+Database user: runmind_dev_user.
+
+Database:
+
+users table includes user_id, strava_id (nullable), Strava tokens (nullable), email (unique, not null), password (hashed, not null), role ('runner'/'coach'/'admin', default 'runner'), is_premium.
+
+activities table stores run data, linked to user_id, includes mental state columns.
+
+diary_entries table stores daily text notes.
+
+diet_logs table stores meal descriptions and estimated nutrition.
+
+goals table stores user goals and tracks status.
+
+Authentication:
+
+Implemented JWT-based authentication.
+
+Backend authController.js handles /auth/register and /auth/login, issuing JWTs.
+
+Backend stravaController.js (handleCallback) finds/creates user based on Strava ID, updates tokens/profile, and issues a JWT for login via Strava.
+
+Backend authenticateToken.js middleware verifies JWT and attaches req.user payload.
+
+All API routes (/api/*) use authenticateToken middleware.
+
+Frontend Structure:
+
+Standard Create React App structure using react-scripts.
+
+Using react-router-dom for navigation.
+
+Centralized API client (src/api.js) using axios interceptors (adds Auth header, handles 401/403).
+
+Components (Dashboard, ActivityDetail, DiaryPage, DietLogPage, GoalsPage, MentalStateLogger, TrendsChart) use apiClient for protected API calls.
+
+Login/Registration components (LoginPage, RegisterPage) functional.
+
+StravaCallback.js stores authToken and user info into localStorage.
+
+App.js uses authToken for isLoggedIn state and route protection.
+
+Dashboard.js correctly shows "Sync" button or "Connect Strava" prompt based on strava_id in stored user info.
+
+Functionality Status:
+
+✅ User Registration & Login (Email/Password & Strava).
+
+✅ Strava Activity Sync (Protected, prompts non-connected users).
+
+✅ View Activities & Detail (Protected).
+
+✅ Log Mental State (Protected).
+
+✅ Diary CRUD (Protected).
+
+✅ Diet Log CRUD (Protected).
+
+✅ Goal CRUD & Progress Display (Protected).
+
+✅ Basic & Advanced Insights Display (Protected).
+
+✅ PWA: Installable, App Shell loads offline (API data caching deferred).
+
+✅ Basic Charting on Dashboard.
+
+Current Known Limitations/Next Steps:
+
+Account Linking: No explicit mechanism yet for an existing email/password user to link Strava, or vice-versa.
+
+API Offline Caching: Deferred.
+
+Coach Role: No specific functionality or UI for users with the 'coach' role yet.
+
+Sprint 15: Coach Registration & Athlete Linking (Foundation)
+
+Goal: Allow users to register specifically as coaches and implement the basic mechanism for athletes (runners) to request a connection with a coach, and for coaches to accept/manage these requests. This sprint focuses on the backend data structure and API endpoints, with minimal frontend UI just to test.
+
+Tasks:
+
+Database:
+
+Create a coach_athlete_links table (link_id, coach_user_id (FK to users.user_id), athlete_user_id (FK to users.user_id), status ('pending', 'accepted', 'declined', 'revoked'), requested_by ('athlete' or 'coach'), created_at, updated_at).
+
+Add necessary constraints (e.g., UNIQUE on coach_id + athlete_id).
+
+Ensure users table role column exists and supports 'coach'.
+
+Backend - Update Auth:
+
+Modify /auth/register controller (authController.js) to optionally accept a role in the request body (defaulting to 'runner' if not provided or invalid). Only allow 'runner' or 'coach' for self-registration.
+
+Backend - New Coach/Link Routes & Controllers:
+
+Create routes/coaches.js and controllers/coachController.js.
+
+Athlete sends request: POST /api/coaches/link/request (Body: { coachEmail: "..." }) - Finds coach by email, creates 'pending' link entry initiated by 'athlete'. Requires athlete JWT.
+
+Coach lists requests: GET /api/coaches/link/requests?status=pending - Gets pending link requests for the logged-in coach. Requires coach JWT.
+
+Coach accepts/declines: PUT /api/coaches/link/requests/:linkId (Body: { status: "accepted" | "declined" }) - Updates status of a specific link request. Requires coach JWT and ownership check.
+
+Coach lists athletes: GET /api/coaches/athletes?status=accepted - Gets list of accepted athletes for the logged-in coach. Requires coach JWT.
+
+(Optional) Athlete lists coaches: GET /api/athletes/coaches?status=accepted - Gets list of coaches the logged-in athlete is linked with. Requires athlete JWT.
+
+(Optional) Athlete/Coach revokes link: DELETE /api/coaches/link/:linkId - Allows either party to revoke an 'accepted' link (sets status to 'revoked' or deletes). Requires JWT and check if user is part of the link.
+
+Frontend - Basic UI (Minimal for Testing):
+
+Registration: Add a simple dropdown or checkbox to the RegisterPage.js form allowing users to select the 'Coach' role (ensure it sends role: 'coach' to the backend).
+
+Athlete View (e.g., on Dashboard or new Settings page): Add a simple input field and button: "Request link with coach (email): [input] [Request Button]". This calls the POST /api/coaches/link/request endpoint.
+
+Coach View (Placeholder Dashboard/New Page):
+
+Add basic routing in App.js for a /coach/dashboard (protected, maybe check role from JWT/user info).
+
+Create a very basic CoachDashboard.js component.
+
+Inside CoachDashboard.js, add sections to:
+
+Fetch and display pending requests (GET /api/coaches/link/requests?status=pending).
+
+Add Accept/Decline buttons next to each request (calling PUT /api/coaches/link/requests/:linkId).
+
+Fetch and display list of accepted athletes (GET /api/coaches/athletes?status=accepted).
+
+Why this order? We need the database structure and API endpoints before we can build a proper UI for coaches to interact with athletes. This sprint focuses on getting the backend connection logic working.
+the structure:
+backend/
+├── node_modules/
+├── routes/             <-- For route definitions
+│   ├── activities.js
+│   ├── auth.js
+│   ├── diary.js
+│   ├── diet.js
+│   ├── goals.js
+│   ├── insights.js
+│   └── strava.js
+├── controllers/        <-- For route handler logic
+│   ├── activityController.js
+│   ├── authController.js
+│   ├── diaryController.js
+│   ├── dietController.js
+│   ├── goalController.js
+│   ├── insightController.js
+│   └── stravaController.js
+├── middleware/         <-- For middleware functions
+│   └── authenticateToken.js
+├── services/           <-- For business logic, helpers
+│   ├── analyticsService.js
+│   └── stravaService.js
+├── .env
+├── db.js
+├── package.json
+├── package-lock.json
+└── server.js           <-- Core server setup & mounting routes
