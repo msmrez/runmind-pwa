@@ -1,12 +1,12 @@
 // src/components/Dashboard.js
-import React, { useState, useEffect } from "react";
-import apiClient from "../api"; // Use apiClient for protected routes
+import React, { useState, useEffect, useCallback } from "react"; // Added useCallback
+import apiClient from "../api"; // Use centralized API client
 import { useNavigate, Link } from "react-router-dom";
 import MentalStateLogger from "./MentalStateLogger"; // Import from separate file
-import TrendsChart from "./TrendsChart";
-import "./Dashboard.css";
+import TrendsChart from "./TrendsChart"; // Import chart component
+import "./Dashboard.css"; // Import CSS
 
-// Define goalTypes locally if not imported
+// Define goalTypes locally if not imported from a shared constants file
 const goalTypes = [
   { value: "weekly_distance", label: "Weekly Distance", unit: "km" },
   { value: "weekly_runs", label: "Weekly Runs", unit: "runs" },
@@ -14,78 +14,105 @@ const goalTypes = [
   { value: "monthly_runs", label: "Monthly Runs", unit: "runs" },
 ];
 
-// --- CoachLinkRequest Component (Now uses apiClient) ---
-const CoachLinkRequest = ({ userId }) => { // userId might not be strictly needed if apiClient handles auth
-    const [coachEmail, setCoachEmail] = useState('');
-    const [requestStatus, setRequestStatus] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+// --- CoachLinkRequest Component ---
+// (Assuming this component exists and uses apiClient correctly as per previous steps)
+const CoachLinkRequest = ({ userId }) => {
+  // userId might not be needed if interceptor handles everything
+  const [coachEmail, setCoachEmail] = useState("");
+  const [requestStatus, setRequestStatus] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-    const handleRequest = async () => {
-         if (!coachEmail) { setRequestStatus('Please enter coach email.'); return; }
-         setIsLoading(true); setRequestStatus('Sending request...');
-         try {
-             // Use apiClient - token added automatically
-             const response = await apiClient.post('/api/coaches/link/request', { coachEmail });
-             setRequestStatus(response.data.message || 'Request sent!');
-             setCoachEmail('');
-         } catch (err) { console.error("Link request error:", err); setRequestStatus(`Error: ${err.response?.data?.message || 'Failed request.'}`); }
-         finally { setIsLoading(false); }
-    };
+  const handleRequest = async () => {
+    if (!coachEmail) {
+      setRequestStatus("Please enter coach email.");
+      return;
+    }
+    setIsLoading(true);
+    setRequestStatus("Sending request...");
+    try {
+      const response = await apiClient.post("/api/coaches/link/request", {
+        coachEmail,
+      });
+      setRequestStatus(response.data.message || "Request sent!");
+      setCoachEmail("");
+    } catch (err) {
+      console.error("Link request error:", err);
+      setRequestStatus(
+        `Error: ${err.response?.data?.message || "Failed request."}`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    return ( /* ... JSX for the coach link form ... */
-        <div className="dashboard-card">
-            <h4>Link with a Coach</h4>
-            <div style={{display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
-                <input type="email" value={coachEmail} onChange={(e) => setCoachEmail(e.target.value)} placeholder="Coach's email address" disabled={isLoading} style={{flexGrow:1, padding:'8px'}} />
-                <button onClick={handleRequest} disabled={isLoading} style={{padding:'8px 12px'}}> {isLoading ? 'Sending...' : 'Request Link'} </button>
-            </div>
-             {requestStatus && <p style={{marginTop:'10px', fontStyle:'italic'}}>{requestStatus}</p>}
-        </div>
-     );
+  return (
+    <div className="dashboard-card">
+      <h4>Link with a Coach</h4>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          flexWrap: "wrap",
+        }}
+      >
+        <input
+          type="email"
+          value={coachEmail}
+          onChange={(e) => setCoachEmail(e.target.value)}
+          placeholder="Coach's email address"
+          disabled={isLoading}
+          style={{ flexGrow: 1, padding: "8px" }}
+        />
+        <button
+          onClick={handleRequest}
+          disabled={isLoading}
+          style={{ padding: "8px 12px" }}
+        >
+          {" "}
+          {isLoading ? "Sending..." : "Request Link"}{" "}
+        </button>
+      </div>
+      {requestStatus && (
+        <p style={{ marginTop: "10px", fontStyle: "italic" }}>
+          {requestStatus}
+        </p>
+      )}
+    </div>
+  );
 };
 // --- End CoachLinkRequest ---
 
 // --- Main Dashboard Component ---
 const Dashboard = () => {
   const navigate = useNavigate();
-
   // --- State Variables ---
   const [syncStatus, setSyncStatus] = useState("");
   const [isLoadingSync, setIsLoadingSync] = useState(false);
-  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
+  const [isLoadingActivities, setIsLoadingActivities] = useState(true); // Start loading true
   const [activities, setActivities] = useState([]);
-  const [userInfo, setUserInfo] = useState(null); // Holds user data from localStorage
+  const [userInfo, setUserInfo] = useState(null); // Start null
   const [activitiesError, setActivitiesError] = useState("");
   const [insights, setInsights] = useState([]);
-  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(true); // Start loading true
   const [insightsError, setInsightsError] = useState("");
   const [activeGoals, setActiveGoals] = useState([]);
-  const [isLoadingGoals, setIsLoadingGoals] = useState(false);
+  const [isLoadingGoals, setIsLoadingGoals] = useState(true); // Start loading true
   const [goalsError, setGoalsError] = useState("");
-  // --- State for Strava connection status ---
-  const [isStravaConnected, setIsStravaConnected] = useState(false); // Initialize false
+  const [isStravaConnected, setIsStravaConnected] = useState(false); // Start false
 
-  // --- Handlers & Fetch Functions (Using apiClient) ---
-  const handleMentalStateUpdate = (activityId, updatedState) => {
-    setActivities((current) =>
-      current.map((act) =>
-        act.activity_id === activityId ? { ...act, ...updatedState } : act
-      )
-    );
-    if (userInfo?.appUserId) {
-      fetchInsights();
-      fetchActiveGoals();
-    }
-  };
-
-  const fetchStoredActivities = async () => {
-    if (!userInfo) return; // Need userInfo check here or rely on useEffect guard
+  // --- Use useCallback for Fetch Functions ---
+  const fetchStoredActivities = useCallback(async () => {
+    console.log("[Dashboard] fetchStoredActivities - Called");
     setIsLoadingActivities(true);
-    setActivitiesError("");
+    setActivitiesError(""); // Set loading true here
     try {
       const response = await apiClient.get("/api/activities");
       setActivities(response.data || []);
+      console.log("[Dashboard] fetchStoredActivities - Success");
     } catch (error) {
+      console.error("[Dashboard] fetchStoredActivities - Error:", error);
+      // Avoid setting error if it's an auth error handled by interceptor
       if (error.response?.status !== 401 && error.response?.status !== 403) {
         setActivitiesError(
           `Failed load activities: ${
@@ -93,14 +120,15 @@ const Dashboard = () => {
           }`
         );
       }
-      setActivities([]);
+      setActivities([]); // Clear on error
     } finally {
-      setIsLoadingActivities(false);
+      setIsLoadingActivities(false); // Set loading false in finally
+      console.log("[Dashboard] fetchStoredActivities - Finished");
     }
-  };
+  }, []); // Empty dependency array - relies on token from apiClient
 
-  const fetchInsights = async () => {
-    if (!userInfo) return;
+  const fetchInsights = useCallback(async () => {
+    console.log("[Dashboard] fetchInsights - Called");
     setIsLoadingInsights(true);
     setInsightsError("");
     setInsights([]);
@@ -109,7 +137,9 @@ const Dashboard = () => {
       setInsights(
         Array.isArray(response.data.insights) ? response.data.insights : []
       );
+      console.log("[Dashboard] fetchInsights - Success");
     } catch (error) {
+      console.error("[Dashboard] fetchInsights - Error:", error);
       if (error.response?.status !== 401 && error.response?.status !== 403) {
         setInsightsError(
           `Failed load insights: ${
@@ -120,11 +150,12 @@ const Dashboard = () => {
       setInsights([]);
     } finally {
       setIsLoadingInsights(false);
+      console.log("[Dashboard] fetchInsights - Finished");
     }
-  };
+  }, []); // Empty dependency array
 
-  const fetchActiveGoals = async () => {
-    if (!userInfo) return;
+  const fetchActiveGoals = useCallback(async () => {
+    console.log("[Dashboard] fetchActiveGoals - Called");
     setIsLoadingGoals(true);
     setGoalsError("");
     setActiveGoals([]);
@@ -133,22 +164,42 @@ const Dashboard = () => {
         params: { status: "active" },
       });
       setActiveGoals(response.data || []);
+      console.log("[Dashboard] fetchActiveGoals - Success");
     } catch (error) {
+      console.error("[Dashboard] fetchActiveGoals - Error:", error);
       if (error.response?.status !== 401 && error.response?.status !== 403) {
         setGoalsError(
-          `Failed load active goals: ${
-            error.response?.data?.message || error.message
-          }`
+          `Failed load goals: ${error.response?.data?.message || error.message}`
         );
       }
       setActiveGoals([]);
     } finally {
       setIsLoadingGoals(false);
+      console.log("[Dashboard] fetchActiveGoals - Finished");
+    }
+  }, []); // Empty dependency array
+
+  // --- Handlers ---
+  const handleMentalStateUpdate = (activityId, updatedState) => {
+    console.log(
+      `%c[Dashboard] handleMentalStateUpdate for activity ${activityId}`,
+      "color: green;",
+      updatedState
+    );
+    setActivities((currentActivities) =>
+      currentActivities.map((act) =>
+        act.activity_id === activityId ? { ...act, ...updatedState } : act
+      )
+    );
+    // Re-fetch insights and goals as mental state might influence them
+    if (userInfo?.appUserId) {
+      fetchInsights();
+      fetchActiveGoals();
     }
   };
 
   const handleSyncActivities = async () => {
-    // No need to check userInfo here as button won't render if !userInfo
+    if (!userInfo) return; // Should be guarded by button visibility too
     setIsLoadingSync(true);
     setSyncStatus("Syncing...");
     setActivitiesError("");
@@ -159,235 +210,191 @@ const Dashboard = () => {
       setSyncStatus(
         `Sync successful! ${response.data.activitiesStored} processed.`
       );
+      // Refetch all data after successful sync
       fetchStoredActivities();
       fetchInsights();
       fetchActiveGoals();
     } catch (error) {
-      // Handle specific "Strava not connected" error differently if needed
-      if (error.response?.data?.code === "STRAVA_NOT_CONNECTED") {
-        setSyncStatus(
-          error.response.data.message || "Cannot sync: Strava not connected."
-        );
-        // Update connection status state? Maybe not needed here as it's checked on load.
-        // setIsStravaConnected(false);
-      } else if (
-        error.response?.status !== 401 &&
-        error.response?.status !== 403
-      ) {
-        console.error("[Dashboard] Sync Error:", error);
+      console.error("[Dashboard] handleSyncActivities Error:", error);
+      // Avoid setting error if it's an auth error handled by interceptor
+      if (error.response?.status !== 401 && error.response?.status !== 403) {
         setSyncStatus(
           `Sync failed: ${error.response?.data?.message || error.message}`
         );
       }
-      // 401/403 handled by interceptor
     } finally {
       setIsLoadingSync(false);
     }
   };
 
-  const CoachLinkRequest = () => {
-    const [coachEmail, setCoachEmail] = useState("");
-    const [requestStatus, setRequestStatus] = useState("");
-    const [isLoading, setIsLoading] = useState(false);
-
-    const handleRequest = async () => {
-      if (!coachEmail) {
-        setRequestStatus("Please enter coach email.");
-        return;
-      }
-      setIsLoading(true);
-      setRequestStatus("Sending request...");
-      try {
-        const response = await apiClient.post("/api/coaches/link/request", {
-          coachEmail,
-        });
-        setRequestStatus(response.data.message || "Request sent!");
-        setCoachEmail(""); // Clear input on success
-      } catch (err) {
-        setRequestStatus(
-          `Error: ${err.response?.data?.message || "Failed to send request."}`
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    return (
-      <div className="dashboard-card">
-        {" "}
-        {/* Reuse card style */}
-        <h4>Link with a Coach</h4>
-        <input
-          type="email"
-          value={coachEmail}
-          onChange={(e) => setCoachEmail(e.target.value)}
-          placeholder="Coach's email address"
-          disabled={isLoading}
-        />
-        <button
-          onClick={handleRequest}
-          disabled={isLoading}
-          style={{ marginLeft: "10px" }}
-        >
-          {isLoading ? "Sending..." : "Request Link"}
-        </button>
-        {requestStatus && (
-          <p style={{ marginTop: "10px", fontStyle: "italic" }}>
-            {requestStatus}
-          </p>
-        )}
-      </div>
-    );
-  };
-  // --- useEffect for Loading User Info and Initial Data ---
+  // --- useEffect for Loading User Info (runs once) ---
   useEffect(() => {
-    console.log("[Dashboard] Mount effect running.");
-    const storedUserStr = localStorage.getItem("stravaAthlete"); // Key from login/callback
-    let userIdToFetch = null;
-    let userHasStravaId = false; // Reset flag
-
+    console.log("[Dashboard] Mount effect running - loading user info.");
+    let initialUserInfo = null;
+    let userHasStravaId = false;
+    const storedUserStr = localStorage.getItem("stravaAthlete"); // Key used in login/callback
     if (storedUserStr) {
       try {
         const parsedUser = JSON.parse(storedUserStr);
-        if (parsedUser?.appUserId && parsedUser?.firstname) {
-          setUserInfo(parsedUser);
-          userIdToFetch = parsedUser.appUserId;
-          // --- Check for Strava ID ---
-          // Adjust 'strava_id' or 'id' based on what your backend actually puts
-          // in the 'user' object stored in localStorage['stravaAthlete']
-          // Let's check for 'strava_id' specifically if backend adds it on link
-          const stravaIdKey = "strava_id";
-          if (parsedUser[stravaIdKey]) {
-            // Check for the explicit Strava ID field if backend adds it
-            console.log("[Dashboard Mount] User has Strava ID.");
-            userHasStravaId = true;
-          } else {
-            console.log("[Dashboard Mount] User loaded, no Strava ID found.");
-          }
-          // --- End Strava Check ---
+        if (parsedUser?.appUserId) {
+          // Check for essential ID
+          initialUserInfo = parsedUser;
+          // Check connection status (adjust key if needed)
+          userHasStravaId =
+            parsedUser.isStravaConnected ?? !!parsedUser.strava_id;
+          console.log(
+            "[Dashboard Mount] User info loaded:",
+            initialUserInfo,
+            "Strava Connected:",
+            userHasStravaId
+          );
         } else {
-          /* ... handle invalid stored data ... */
+          console.warn("[Dashboard Mount] Parsed user missing appUserId.");
+          localStorage.removeItem("stravaAthlete"); // Clean up invalid data
+          // Potentially clear token too if user info invalid?
+          // localStorage.removeItem("authToken");
         }
       } catch (e) {
-        /* ... handle parsing error ... */
+        console.error("[Dashboard Mount] Error parsing stored user data.", e);
+        localStorage.removeItem("stravaAthlete"); // Clean up corrupted data
       }
     } else {
-      /* ... handle no stored user ... */
+      console.log("[Dashboard Mount] No stored user data found.");
+      // If no user info, check if a token *does* exist (might indicate incomplete login)
+      if (localStorage.getItem("authToken")) {
+        console.warn(
+          "[Dashboard Mount] Auth token exists but user info missing. Might need to fetch /auth/me or relogin."
+        );
+        // Consider calling a fetch /auth/me endpoint here if you implement one
+      }
     }
+    setUserInfo(initialUserInfo); // Set state for userInfo
+    setIsStravaConnected(userHasStravaId); // Set state for connection
+  }, []); // Runs only once on mount to load initial state
 
-    setIsStravaConnected(userHasStravaId); // <<< Set state based on check
-
-    if (userIdToFetch) {
+  // --- useEffect for Fetching Data (depends on userInfo) ---
+  useEffect(() => {
+    // Only fetch if we have successfully loaded userInfo
+    if (userInfo && userInfo.appUserId) {
       console.log(
-        `[Dashboard Mount] Fetching initial data for user ${userIdToFetch}...`
+        `[Dashboard Data Fetch Effect] UserInfo ready (ID: ${userInfo.appUserId}). Fetching data...`
       );
-      // Only fetch activities/insights/goals if user is valid
-      fetchStoredActivities(); // Uses token via apiClient
+      fetchStoredActivities();
       fetchInsights();
       fetchActiveGoals();
     } else {
-      /* ... skip fetch ... */
+      console.log(
+        "[Dashboard Data Fetch Effect] Skipping fetch - userInfo not available."
+      );
+      // Ensure loading states are false if we aren't fetching
+      setIsLoadingActivities(false);
+      setIsLoadingInsights(false);
+      setIsLoadingGoals(false);
     }
-  }, []); // Runs once
+    // Depend on userInfo. Re-running fetch functions doesn't add value here as they are stable references from useCallback([])
+  }, [userInfo, fetchStoredActivities, fetchInsights, fetchActiveGoals]); // Depend on userInfo and fetch functions
 
   // Format date helper
   const formatDate = (dateString) => {
-    /* ... */
+    if (!dateString) return "N/A";
+    try {
+      return new Date(dateString).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (e) {
+      return "Invalid Date";
+    }
   };
   // Helper to get unit for goal display
   const getGoalUnit = (type) =>
     goalTypes.find((gt) => gt.value === type)?.unit || "";
 
   // --- Render Logic ---
-  if (!userInfo) {
+  // Show primary loading/error only if userInfo hasn't loaded yet
+  if (userInfo === null) {
+    // Check explicitly for null (initial state)
+    // Use activitiesError as a general indicator for user loading issues for now
     return (
       <div>
         <h2>Dashboard</h2>
-        <p>{activitiesError || "Loading user info..."}</p>
-        {activitiesError && <Link to="/">(Return Home / Login)</Link>}
+        <p>{activitiesError || "Loading user data..."}</p>
+        {activitiesError && <Link to="/login">Please Login</Link>}
       </div>
     );
   }
 
+  // Prepare data needed for rendering
   const chartActivities = activities.slice(0, 10);
   const backendUrl =
-    process.env.REACT_APP_BACKEND_URL || "http://localhost:5001"; // For Strava connect link
+    process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
 
   return (
     <div className="dashboard-container">
+      {/* Header */}
       <div className="dashboard-header">
         <h2>Dashboard</h2>
         <p>Welcome, {userInfo.firstname}!</p>
-
-        {/* --- Conditional Strava Sync Button / Connect Prompt --- */}
+        {/* Conditional Strava Button */}
         {isStravaConnected ? (
-          // Show Sync button if Strava is connected
-          <>
-            <button
-              className="sync-button"
-              onClick={handleSyncActivities}
-              disabled={isLoadingSync}
-            >
-              {isLoadingSync ? "Syncing..." : "Sync Strava Activities"}
-            </button>
-            {syncStatus && <p className="sync-status">{syncStatus}</p>}
-          </>
-        ) : (
-          // Show Connect prompt if Strava is NOT connected
-          <div
-            className="strava-connect-prompt"
-            style={{
-              border: "1px solid #f0ad4e",
-              backgroundColor: "#fcf8e3",
-              padding: "10px 15px",
-              borderRadius: "4px",
-              marginTop: "10px",
-              textAlign: "center",
-            }}
+          <button
+            className="sync-button"
+            onClick={handleSyncActivities}
+            disabled={isLoadingSync}
           >
-            <p
-              style={{
-                margin: "0 0 8px 0",
-                color: "#8a6d3b",
-                fontWeight: "bold",
-              }}
-            >
-              Connect Strava to sync activities!
-            </p>
-            {/* Link points to the backend authorization route */}
+            {" "}
+            {isLoadingSync ? "Syncing..." : "Sync Strava Activities"}{" "}
+          </button>
+        ) : (
+          <div className="strava-connect-prompt">
+            {" "}
+            <p>Connect Strava to sync activities!</p>{" "}
             <a
               href={`${backendUrl}/strava/authorize`}
               className="App-link sync-button"
-              style={{ textDecoration: "none" }}
             >
               Connect with Strava
-            </a>
+            </a>{" "}
           </div>
         )}
-        {/* --- End Conditional Section --- */}
+        {syncStatus && <p className="sync-status">{syncStatus}</p>}
       </div>
 
       {/* Insights Section */}
       <div className="dashboard-card insights-card">
         <h4>Quick Insights</h4>
-        {isLoadingInsights && <p>Loading...</p>}
+        {isLoadingInsights && <p>Loading insights...</p>}
         {insightsError && <p className="error-text">{insightsError}</p>}
         {!isLoadingInsights && !insightsError && insights.length > 0 && (
           <ul className="insights-list">
             {" "}
             {insights.map((insightString, index) => (
               <li key={index}>
-                {insightString}{" "}
+                {" "}
+                {insightString} {/* Premium Star Placeholder */}{" "}
                 {(insightString.includes("Factor:") ||
                   insightString.includes("Notes:")) && (
-                  <span title="Premium">★</span>
+                  <span
+                    title="Premium Insight"
+                    style={{
+                      fontSize: "0.7em",
+                      marginLeft: "8px",
+                      color: "gold",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    ★
+                  </span>
                 )}{" "}
               </li>
             ))}{" "}
           </ul>
         )}
         {!isLoadingInsights && !insightsError && insights.length === 0 && (
-          <p>No insights yet.</p>
+          <p>No insights available yet.</p>
         )}
       </div>
 
@@ -400,7 +407,7 @@ const Dashboard = () => {
           </Link>
           )
         </h4>
-        {isLoadingGoals && <p>Loading...</p>}
+        {isLoadingGoals && <p>Loading goals...</p>}
         {goalsError && <p className="error-text">{goalsError}</p>}
         {!isLoadingGoals && activeGoals.length === 0 && !goalsError && (
           <p>
@@ -410,77 +417,122 @@ const Dashboard = () => {
         {!isLoadingGoals && activeGoals.length > 0 && (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {" "}
-            {activeGoals.map((goal) => (
-              <li key={goal.goal_id} style={{ marginBottom: "12px" }}>
-                {" "}
-                <div>
-                  {" "}
-                  <strong>
-                    {goal.name ||
-                      goalTypes.find((gt) => gt.value === goal.type)?.label}
-                    :
-                  </strong>{" "}
-                  <span style={{ fontSize: "0.9em", color: "#555" }}>
-                    ({goal.start_date} to {goal.end_date})
-                  </span>{" "}
-                </div>{" "}
-                {goal.current_progress !== null && goal.target_value > 0 && (
-                  <progress
-                    value={goal.current_progress}
-                    max={goal.target_value}
-                    style={{ width: "100%" }}
-                    title={`${goal.progress_percent}%`}
-                  >
-                    {goal.progress_percent}%
-                  </progress>
-                )}{" "}
-                <div style={{ fontSize: "0.85em", textAlign: "right" }}>
-                  {" "}
-                  {goal.current_progress !== null
-                    ? `${goal.current_progress.toFixed(1)} / ${
-                        goal.target_value
-                      }`
-                    : "0"}{" "}
-                  {getGoalUnit(goal.type)}{" "}
-                  {goal.target_value > 0 &&
-                    goal.current_progress !== null &&
-                    ` (${goal.progress_percent}%)`}{" "}
-                </div>{" "}
-              </li>
-            ))}{" "}
+            {activeGoals.map((goal) => {
+              // Safely get progress values inside map
+              const currentProgressValue =
+                typeof goal.current_progress === "number" &&
+                goal.current_progress !== null
+                  ? goal.current_progress
+                  : 0;
+              const targetValue =
+                typeof goal.target_value === "number" &&
+                goal.target_value !== null
+                  ? goal.target_value
+                  : 0;
+              const progressPercent =
+                targetValue > 0
+                  ? Math.min(
+                      100,
+                      Math.round((currentProgressValue / targetValue) * 100)
+                    )
+                  : 0;
+              const progressIsCalculable =
+                typeof goal.current_progress === "number" &&
+                goal.current_progress !== null &&
+                targetValue > 0;
+
+              return (
+                <li key={goal.goal_id} style={{ marginBottom: "12px" }}>
+                  <div>
+                    {" "}
+                    <strong>
+                      {goal.name ||
+                        goalTypes.find((gt) => gt.value === goal.type)?.label}
+                      :
+                    </strong>{" "}
+                    <span
+                      style={{
+                        fontSize: "0.9em",
+                        color: "#555",
+                        marginLeft: "5px",
+                      }}
+                    >
+                      ({goal.start_date} to {goal.end_date})
+                    </span>{" "}
+                  </div>
+                  {progressIsCalculable ? (
+                    <progress
+                      value={currentProgressValue}
+                      max={targetValue}
+                      style={{ width: "100%", marginTop: "3px" }}
+                      title={`${progressPercent}% complete`}
+                    >
+                      {progressPercent}%
+                    </progress>
+                  ) : (
+                    <div
+                      style={{
+                        marginTop: "5px",
+                        fontSize: "0.8em",
+                        color: "#777",
+                      }}
+                    >
+                      (Progress not available)
+                    </div>
+                  )}
+                  {progressIsCalculable && (
+                    <div
+                      style={{
+                        fontSize: "0.85em",
+                        textAlign: "right",
+                        color: "#333",
+                      }}
+                    >
+                      {" "}
+                      {currentProgressValue.toFixed(1)} / {targetValue}{" "}
+                      {getGoalUnit(goal.type)} ({progressPercent}%){" "}
+                    </div>
+                  )}
+                </li>
+              );
+            })}{" "}
           </ul>
         )}
       </div>
 
+      {/* Coach Link Request Form (Only for runners) */}
+      {userInfo && userInfo.role === "runner" && (
+        <CoachLinkRequest userId={userInfo.appUserId} /> // Render if runner
+      )}
+
       {/* Chart Section */}
-      {/* Only render chart if Strava is connected and data available */}
       {isStravaConnected &&
         !isLoadingActivities &&
         chartActivities.length > 1 && (
           <div className="dashboard-card chart-card">
-            {" "}
-            <h4>Recent Trend</h4>{" "}
-            <div style={{ height: "250px" }}>
-              {" "}
+            <h4>Recent Activity Trend</h4>
+            <div style={{ height: "250px", position: "relative" }}>
               <TrendsChart
                 activities={chartActivities}
                 dataKey="distance_km"
                 label="Distance (km)"
-              />{" "}
-            </div>{" "}
+              />
+            </div>
           </div>
         )}
+      {/* Show loading indicator for chart if activities are loading */}
+      {isStravaConnected && isLoadingActivities && (
+        <div className="dashboard-card chart-card">
+          <p>Loading chart data...</p>
+        </div>
+      )}
 
       {/* Activities Section */}
       <div className="dashboard-card activities-card">
         <h3>Your Recent Activities</h3>
-        {/* Show prompt if Strava isn't connected */}
         {!isStravaConnected && (
-          <p style={{ color: "#666", fontStyle: "italic" }}>
-            Connect Strava using the button above to see your activities.
-          </p>
+          <p className="info-text">Connect Strava to see activities.</p>
         )}
-        {/* Show loading/error/table only if Strava IS connected */}
         {isStravaConnected && isLoadingActivities && (
           <p>Loading activities...</p>
         )}
@@ -491,6 +543,7 @@ const Dashboard = () => {
           !isLoadingActivities &&
           activities.length === 0 &&
           !activitiesError && <p>No activities found. Try syncing!</p>}
+        {/* Activity Table */}
         {isStravaConnected && !isLoadingActivities && activities.length > 0 && (
           <div className="activity-table-container">
             <table className="activity-table">
@@ -526,7 +579,27 @@ const Dashboard = () => {
                       onClick={(e) => e.stopPropagation()}
                     >
                       {" "}
-                      {/* ... mental state display ... */}{" "}
+                      {activity.mental_mood && (
+                        <div>Mood: {activity.mental_mood}/5</div>
+                      )}{" "}
+                      {activity.mental_focus && (
+                        <div>Focus: {activity.mental_focus}/5</div>
+                      )}{" "}
+                      {activity.mental_stress && (
+                        <div>Stress: {activity.mental_stress}/5</div>
+                      )}{" "}
+                      {activity.mental_notes && (
+                        <div className="notes-text">
+                          {" "}
+                          Notes: {activity.mental_notes}{" "}
+                        </div>
+                      )}{" "}
+                      {!activity.mental_mood &&
+                        !activity.mental_focus &&
+                        !activity.mental_stress &&
+                        !activity.mental_notes && (
+                          <span className="no-log-text">(Not logged)</span>
+                        )}{" "}
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       {" "}
