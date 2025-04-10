@@ -293,6 +293,64 @@ const styles = {
     color: "#999",
     marginTop: "10px",
   },
+  commentSectionContainer: {
+    marginTop: "20px",
+    borderTop: "1px solid #eee",
+    paddingTop: "15px",
+  },
+  commentToggleButton: {
+    backgroundColor: "#f0f0f0",
+    border: "1px solid #ccc",
+    padding: "5px 10px",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "0.9em",
+  },
+  commentArea: { marginTop: "15px", paddingLeft: "10px" },
+  noCommentsText: { fontStyle: "italic", color: "#888", fontSize: "0.9em" },
+  commentsList: { listStyle: "none", padding: 0, margin: "10px 0 0 0" },
+  commentItem: {
+    marginBottom: "10px",
+    paddingBottom: "10px",
+    borderBottom: "1px dotted #eee",
+    fontSize: "0.95em",
+  },
+  commentAuthor: { fontWeight: "bold", color: "#333", marginRight: "5px" },
+  commentText: { lineHeight: "1.4" },
+  commentTimestamp: {
+    display: "block",
+    textAlign: "right",
+    fontSize: "0.8em",
+    color: "#aaa",
+    marginTop: "3px",
+  },
+  addCommentForm: {
+    marginTop: "15px",
+    paddingTop: "15px",
+    borderTop: "1px solid #eee",
+  },
+  commentTextarea: {
+    width: "100%",
+    padding: "8px",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
+    minHeight: "50px",
+    boxSizing: "border-box",
+    marginBottom: "8px",
+  },
+  commentSubmitButton: {
+    padding: "6px 12px",
+    backgroundColor: "#007bff",
+    color: "white",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer",
+  },
+  commentSubmitStatus: {
+    fontSize: "0.9em",
+    fontStyle: "italic",
+    marginTop: "5px",
+  },
 };
 
 const AthleteDetailPage = () => {
@@ -322,7 +380,21 @@ const AthleteDetailPage = () => {
   const [submitStatus, setSubmitStatus] = useState("");
   // State for the combined and sorted timeline data
   const [timelineData, setTimelineData] = useState([]);
-
+  // <<< --- NEW State for Comments --- >>>
+  // Store comments keyed by activity_id: { activityId1: [comment1, comment2], activityId2: [...] }
+  const [commentsByActivity, setCommentsByActivity] = useState({});
+  // Track which activity's comments are being loaded/shown
+  const [loadingCommentsForActivity, setLoadingCommentsForActivity] =
+    useState(null); // Store activityId being loaded
+  const [commentsError, setCommentsError] = useState("");
+  // Track which activity's comment section is expanded
+  const [expandedCommentActivityId, setExpandedCommentActivityId] =
+    useState(null);
+  // State for the comment input field (specific to the expanded activity)
+  const [newCommentText, setNewCommentText] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [submitCommentStatus, setSubmitCommentStatus] = useState("");
+  // <<< --- End NEW State --- >>>
   // --- Fetch Logic (keep separate fetch functions) ---
   const fetchActivities = useCallback(async () => {
     if (!athleteId) {
@@ -518,6 +590,105 @@ const AthleteDetailPage = () => {
     isLoadingDiary,
     isLoadingDiet,
   ]);
+  // <<< --- NEW Function to Fetch Comments for ONE Activity --- >>>
+  const fetchAndShowComments = useCallback(
+    async (activityId) => {
+      if (!activityId || loadingCommentsForActivity === activityId) return; // Don't fetch if already loading
+
+      console.log(`[Comments] Fetching for activity ${activityId}`);
+      setLoadingCommentsForActivity(activityId); // Mark this specific activity as loading comments
+      setCommentsError(""); // Clear previous errors
+      setIsSubmittingComment(false); // Reset submit state
+      setNewCommentText(""); // Clear input field
+      setSubmitCommentStatus("");
+
+      try {
+        const response = await apiClient.get(
+          `/api/activities/${activityId}/comments`
+        );
+        setCommentsByActivity((prev) => ({
+          ...prev,
+          [activityId]: response.data || [], // Store fetched comments under the activityId key
+        }));
+        setExpandedCommentActivityId(activityId); // Expand this activity's comment section
+      } catch (err) {
+        console.error(
+          `[Comments] Error fetching for activity ${activityId}:`,
+          err
+        );
+        setCommentsError(
+          `Failed to load comments: ${
+            err.response?.data?.message || err.message
+          }`
+        );
+        setExpandedCommentActivityId(null); // Don't expand on error
+      } finally {
+        setLoadingCommentsForActivity(null); // Stop loading marker
+      }
+    },
+    [loadingCommentsForActivity]
+  ); // Depend on loading state to prevent rapid refetch
+
+  // <<< --- NEW Handler for Submitting a Comment --- >>>
+  const handleAddCommentSubmit = async (e, activityId) => {
+    e.preventDefault();
+    if (!newCommentText.trim() || !activityId) {
+      setSubmitCommentStatus("Comment text cannot be empty.");
+      return;
+    }
+    console.log(`[Comments] Submitting for activity ${activityId}`);
+    setIsSubmittingComment(true);
+    setSubmitCommentStatus("Posting comment...");
+    setCommentsError("");
+
+    try {
+      // POST to the new comment endpoint
+      const response = await apiClient.post(
+        `/api/activities/${activityId}/comments`,
+        { commentText: newCommentText }
+      );
+      const newComment = response.data;
+
+      // Add the new comment optimistically or refetch
+      setCommentsByActivity((prev) => ({
+        ...prev,
+        [activityId]: [...(prev[activityId] || []), newComment], // Add new comment to existing list
+      }));
+      setNewCommentText(""); // Clear input
+      setSubmitCommentStatus("Comment posted!");
+      // Clear status message after a delay
+      setTimeout(() => setSubmitCommentStatus(""), 3000);
+    } catch (err) {
+      console.error(
+        `[Comments] Error submitting for activity ${activityId}:`,
+        err
+      );
+      const errorMsg = `Failed to post comment: ${
+        err.response?.data?.message || err.message
+      }`;
+      setSubmitCommentStatus(errorMsg);
+      // Maybe set commentsError too
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+  // <<< --- Handler to Toggle Comment Section --- >>>
+  const toggleComments = (activityId) => {
+    if (expandedCommentActivityId === activityId) {
+      setExpandedCommentActivityId(null); // Collapse if already open
+    } else {
+      // If comments for this activity aren't loaded yet, fetch them
+      if (!commentsByActivity[activityId]) {
+        fetchAndShowComments(activityId);
+      } else {
+        // Comments already loaded, just expand
+        setNewCommentText(""); // Clear potential input
+        setSubmitCommentStatus("");
+        setCommentsError("");
+        setExpandedCommentActivityId(activityId);
+      }
+    }
+  };
 
   // --- Rendering ---
   const isLoading =
@@ -766,6 +937,138 @@ const AthleteDetailPage = () => {
                                 )}
                               </div>
                             )}
+                            {/* <<< --- START: Comment Section Toggle & Display --- >>> */}
+                            <div style={styles.commentSectionContainer}>
+                              {" "}
+                              {/* Add styles for this */}
+                              <button
+                                onClick={() =>
+                                  toggleComments(item.data.activity_id)
+                                }
+                                style={styles.commentToggleButton} // Add styles
+                                disabled={
+                                  loadingCommentsForActivity ===
+                                  item.data.activity_id
+                                }
+                              >
+                                {loadingCommentsForActivity ===
+                                item.data.activity_id
+                                  ? "Loading..."
+                                  : expandedCommentActivityId ===
+                                    item.data.activity_id
+                                  ? "Hide Comments"
+                                  : "View/Add Comments"}
+                                {/* Optionally show comment count if fetched: ` (${commentsByActivity[item.data.activity_id]?.length || 0})` */}
+                              </button>
+                              {/* Conditionally render comments and form if expanded */}
+                              {expandedCommentActivityId ===
+                                item.data.activity_id && (
+                                <div style={styles.commentArea}>
+                                  {" "}
+                                  {/* Add styles */}
+                                  {/* Display error specific to comments */}
+                                  {commentsError && (
+                                    <p
+                                      style={{
+                                        color: "red",
+                                        fontSize: "0.9em",
+                                      }}
+                                    >
+                                      {commentsError}
+                                    </p>
+                                  )}
+                                  {/* Display fetched comments */}
+                                  <h5>Comments</h5>
+                                  {(!commentsByActivity[
+                                    item.data.activity_id
+                                  ] ||
+                                    commentsByActivity[item.data.activity_id]
+                                      ?.length === 0) &&
+                                    !loadingCommentsForActivity && (
+                                      <p style={styles.noCommentsText}>
+                                        No comments yet.
+                                      </p> // Add styles
+                                    )}
+                                  <ul style={styles.commentsList}>
+                                    {" "}
+                                    {/* Add styles */}
+                                    {(
+                                      commentsByActivity[
+                                        item.data.activity_id
+                                      ] || []
+                                    ).map((comment) => (
+                                      <li
+                                        key={comment.comment_id}
+                                        style={styles.commentItem}
+                                      >
+                                        {" "}
+                                        {/* Add styles */}
+                                        <strong style={styles.commentAuthor}>
+                                          {" "}
+                                          {/* Add styles */}
+                                          {comment.commenter_first_name ||
+                                            "User"}{" "}
+                                          {comment.commenter_last_name ||
+                                            comment.commenter_user_id}
+                                          ({comment.commenter_role}):
+                                        </strong>
+                                        <span style={styles.commentText}>
+                                          {comment.comment_text}
+                                        </span>{" "}
+                                        {/* Add styles */}
+                                        <span style={styles.commentTimestamp}>
+                                          {formatDate(comment.created_at)}
+                                        </span>{" "}
+                                        {/* Add styles */}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                  {/* Add Comment Form */}
+                                  <form
+                                    onSubmit={(e) =>
+                                      handleAddCommentSubmit(
+                                        e,
+                                        item.data.activity_id
+                                      )
+                                    }
+                                    style={styles.addCommentForm}
+                                  >
+                                    {" "}
+                                    {/* Add styles */}
+                                    <textarea
+                                      value={newCommentText}
+                                      onChange={(e) =>
+                                        setNewCommentText(e.target.value)
+                                      }
+                                      placeholder="Add a comment..."
+                                      rows="2"
+                                      style={styles.commentTextarea} // Add styles
+                                      disabled={isSubmittingComment}
+                                      required
+                                    />
+                                    <button
+                                      type="submit"
+                                      style={styles.commentSubmitButton} // Add styles
+                                      disabled={
+                                        isSubmittingComment ||
+                                        !newCommentText.trim()
+                                      }
+                                    >
+                                      {isSubmittingComment
+                                        ? "Posting..."
+                                        : "Post Comment"}
+                                    </button>
+                                    {submitCommentStatus && (
+                                      <p style={styles.commentSubmitStatus}>
+                                        {submitCommentStatus}
+                                      </p>
+                                    )}{" "}
+                                    {/* Add styles */}
+                                  </form>
+                                </div>
+                              )}
+                            </div>
+                            {/* <<< --- END: Comment Section --- >>> */}
                           </div>
                         )}
                         {/* --- Render Diary Item --- */}

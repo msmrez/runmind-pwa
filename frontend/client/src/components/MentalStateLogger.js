@@ -13,12 +13,7 @@ const MentalStateLogger = ({ activity, onSave, userId }) => {
   const [error, setError] = useState("");
 
   // Log when isLogging state changes (for debugging)
-  useEffect(() => {
-    console.log(
-      `%c[MSL Activity ${activity.activity_id}] isLogging state changed to: ${isLogging}`,
-      "color: blue;"
-    );
-  }, [isLogging, activity.activity_id]);
+  useEffect(() => {}, [isLogging, activity.activity_id]);
 
   // Effect to update local form state if the activity data changes from the parent
   useEffect(() => {
@@ -29,10 +24,10 @@ const MentalStateLogger = ({ activity, onSave, userId }) => {
       setFocus(activity.mental_focus ?? "");
       setStress(activity.mental_stress ?? "");
       setNotes(activity.mental_notes ?? "");
-      console.log(
-        `%c[MSL Activity ${activity.activity_id}] Props updated while form closed, resetting state.`,
-        "color: purple;"
-      );
+      // console.log(
+      //   `%c[MSL Activity ${activity.activity_id}] Props updated while form closed, resetting state.`,
+      //   "color: purple;"
+      // );
     } else {
       console.log(
         `%c[MSL Activity ${activity.activity_id}] Props updated while form open, NOT resetting state.`,
@@ -100,16 +95,16 @@ const MentalStateLogger = ({ activity, onSave, userId }) => {
   };
 
   // --- Rendering Logic ---
-  console.log(
-    `%c[MSL Activity ${activity.activity_id}] Rendering. isLogging: ${isLogging}`,
-    "color: gray;"
-  );
+  // console.log(
+  //   `%c[MSL Activity ${activity.activity_id}] Rendering. isLogging: ${isLogging}`,
+  //   "color: gray;"
+  // );
 
   if (!isLogging) {
-    console.log(
-      `%c[MSL Activity ${activity.activity_id}] Rendering Button.`,
-      "color: gray;"
-    );
+    // console.log(
+    //   `%c[MSL Activity ${activity.activity_id}] Rendering Button.`,
+    //   "color: gray;"
+    // );
     return (
       <button
         onClick={() => {

@@ -424,7 +424,16 @@ const Dashboard = () => {
     chartActivities?.length
   ); // Use optional chaining just in case
   // --- End of added logs ---
-
+  console.log("[Dashboard Render Check] userInfo.role:", userInfo?.role);
+  console.log(
+    "[Dashboard Render Check - Notes State]",
+    "isLoading:",
+    isLoadingMyTrainingNotes,
+    "error:",
+    myTrainingNotesError,
+    "notesCount:",
+    myTrainingNotes?.length
+  );
   return (
     <div className="dashboard-container">
       {/* Header */}
