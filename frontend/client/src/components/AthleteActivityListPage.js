@@ -1,17 +1,17 @@
-// Create this file: frontend/src/components/AthleteActivityListPage.js
+// In frontend/src/components/AthleteActivityListPage.js
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, Link, useLocation } from "react-router-dom"; // Import hooks/components
-import apiClient from "../api"; // Use your centralized API client
+import { useParams, Link, useLocation } from "react-router-dom";
+import apiClient from "../api";
 
-// Helper function to format Date (can be moved to utils if needed)
+// --- Helper Functions (Keep or move to utils) ---
 const formatDate = (dateString) => {
+  // ... (same as before)
   if (!dateString) return "N/A";
   try {
-    // Using undefined for locale uses the browser's default
     return new Date(dateString).toLocaleString(undefined, {
-      dateStyle: "medium", // e.g., "Jan 1, 2024"
-      timeStyle: "short", // e.g., "10:30 AM"
+      dateStyle: "medium",
+      timeStyle: "short",
     });
   } catch (e) {
     console.error("Error formatting date:", dateString, e);
@@ -19,46 +19,148 @@ const formatDate = (dateString) => {
   }
 };
 
+// --- Style Objects (or use CSS classes) ---
+const styles = {
+  pageContainer: {
+    padding: "20px",
+    maxWidth: "950px", // Slightly wider max width
+    margin: "20px auto", // Add top/bottom margin
+    fontFamily: "Arial, sans-serif", // Example font
+    backgroundColor: "#f4f7f6", // Light background for the page area
+    borderRadius: "8px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+  },
+  backLink: {
+    marginBottom: "20px", // More space below link
+    display: "inline-block",
+    color: "#007bff",
+    textDecoration: "none",
+  },
+  pageTitle: {
+    marginTop: 0,
+    marginBottom: "25px", // More space below title
+    color: "#333",
+    borderBottom: "1px solid #eee",
+    paddingBottom: "10px",
+  },
+  loadingText: {
+    textAlign: "center",
+    padding: "40px",
+    fontSize: "1.1em",
+    color: "#666",
+  },
+  errorText: {
+    color: "red",
+    backgroundColor: "#ffebee",
+    border: "1px solid red",
+    padding: "15px",
+    borderRadius: "5px",
+    marginTop: "20px",
+  },
+  activityList: {
+    listStyle: "none",
+    padding: 0,
+    margin: 0,
+  },
+  activityListItem: {
+    backgroundColor: "#ffffff", // White card background
+    border: "1px solid #e0e0e0",
+    padding: "15px 20px", // Adjust padding
+    marginBottom: "15px", // More space between items
+    borderRadius: "6px",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
+    transition: "box-shadow 0.2s ease-in-out", // Subtle hover effect
+  },
+  // Add hover style example (if not using CSS classes)
+  // activityListItemHover: { // Would need onMouseEnter/Leave to apply
+  //   boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+  // },
+  activityTitle: {
+    marginTop: 0,
+    marginBottom: "8px", // Less space below title
+    color: "#2c3e50", // Darker title color
+    fontSize: "1.2em",
+  },
+  activityDate: {
+    margin: "0 0 15px 0", // Space below date
+    fontSize: "0.9em",
+    color: "#7f8c8d", // Muted color for date
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", // Adjust min width
+    gap: "12px 18px",
+    marginTop: "10px",
+    fontSize: "0.95em",
+    paddingTop: "10px",
+    borderTop: "1px solid #f0f0f0", // Light separator line
+  },
+  statItem: {
+    padding: "5px 0", // Add some vertical padding
+  },
+  statLabel: {
+    fontWeight: "bold",
+    color: "#34495e", // Slightly darker label color
+    marginRight: "5px",
+  },
+  mentalStateSection: {
+    marginTop: "18px",
+    padding: "12px 15px", // Adjust padding
+    borderTop: "1px dashed #ccc",
+    fontSize: "0.9em",
+    backgroundColor: "#f8f9fa", // Slightly different background
+    borderRadius: "4px",
+    color: "#555",
+  },
+  mentalStateTitle: {
+    color: "#333",
+    fontWeight: "bold",
+    display: "block",
+    marginBottom: "8px",
+    fontSize: "1.05em",
+  },
+  mentalStateItem: {
+    marginRight: "15px",
+    display: "inline-block", // Display items inline
+  },
+  mentalNotes: {
+    marginTop: "8px",
+    marginBottom: 0,
+    whiteSpace: "pre-wrap",
+    fontStyle: "italic",
+    borderLeft: "3px solid #bdc3c7", // Muted color for border
+    paddingLeft: "10px",
+    lineHeight: "1.4",
+  },
+};
+// --- End Style Objects ---
+
 const AthleteActivityListPage = () => {
-  const { athleteId } = useParams(); // Get athleteId from the URL parameter (e.g., /coach/athlete/123)
-  const location = useLocation(); // Get location object, contains state passed from Link
-  // Get athlete's name from state passed via Link, fallback to ID
+  const { athleteId } = useParams();
+  const location = useLocation();
   const athleteName = location.state?.athleteName || `Athlete ID: ${athleteId}`;
 
   const [activities, setActivities] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Fetch activities for this specific athlete using useCallback for stable dependency
   const fetchActivities = useCallback(async () => {
+    // ... (fetch logic remains the same) ...
     if (!athleteId) {
-      setError("Athlete ID missing from URL.");
+      setError("Athlete ID missing.");
       setIsLoading(false);
       return;
     }
-    console.log(
-      `[AthleteActivityList] Attempting to fetch activities for athlete ${athleteId}...`
-    );
+    console.log(`[AthleteActivityList] Fetching for ${athleteId}...`);
     setIsLoading(true);
-    setError(""); // Clear previous errors
+    setError("");
     try {
-      // Call the backend endpoint using the configured apiClient
       const response = await apiClient.get(
-        `/api/coaches/athletes/${athleteId}/activities` // Endpoint we defined in backend
+        `/api/coaches/athletes/${athleteId}/activities`
       );
-      setActivities(response.data || []); // Set state with fetched data, default to empty array
-      console.log(
-        `[AthleteActivityList] Successfully received ${
-          response.data?.length || 0
-        } activities.`
-      );
+      setActivities(response.data || []);
     } catch (err) {
-      // Error handling - interceptor might handle 401/403 redirect already
-      console.error(
-        "[AthleteActivityList] Error fetching activities:",
-        err.response?.data || err.message
-      );
-      // Set local error state unless it's a 401/403 handled by interceptor
+      console.error("[AthleteActivityList] Error:", err);
       if (err.response?.status !== 401 && err.response?.status !== 403) {
         setError(
           `Failed to load activities: ${
@@ -66,178 +168,124 @@ const AthleteActivityListPage = () => {
           }`
         );
       } else if (err.response?.status === 403) {
-        // Specific message for permission denied if interceptor doesn't redirect
-        setError("Permission denied to view these activities.");
-      }
-      setActivities([]); // Clear activities on error
+        setError("Permission denied.");
+      } // Note: 401 should be handled by interceptor redirect
+      setActivities([]);
     } finally {
-      setIsLoading(false); // Ensure loading indicator stops
+      setIsLoading(false);
     }
-  }, [athleteId]); // Re-run effect if athleteId changes
+  }, [athleteId]);
 
-  // useEffect hook to trigger the fetch when the component mounts or athleteId changes
   useEffect(() => {
     fetchActivities();
-  }, [fetchActivities]); // Dependency array includes the memoized fetch function
+  }, [fetchActivities]);
 
-  // --- Rendering Logic ---
+  // --- Rendering with Styles ---
   return (
-    <div style={{ padding: "20px", maxWidth: "900px", margin: "auto" }}>
-      {/* Navigation link back to the Coach Dashboard */}
-      <Link
-        to="/coach/dashboard" // The route defined in App.js for CoachDashboard
-        style={{ marginBottom: "15px", display: "inline-block" }}
-      >
+    <div style={styles.pageContainer}>
+      <Link to="/coach/dashboard" style={styles.backLink}>
         ← Back to Coach Dashboard
       </Link>
 
-      {/* Display Athlete Name passed via route state */}
-      <h2>{athleteName}'s Activities</h2>
+      <h2 style={styles.pageTitle}>{athleteName}'s Activities</h2>
 
-      {/* Loading State Indicator */}
-      {isLoading && <p>Loading activities...</p>}
+      {/* Loading State */}
+      {isLoading && <p style={styles.loadingText}>Loading activities...</p>}
 
-      {/* Error Message Display */}
-      {error && <p style={{ color: "red" }}>Error: {error}</p>}
+      {/* Error State */}
+      {error && <div style={styles.errorText}>{error}</div>}
 
-      {/* Display the list of activities if not loading and no error */}
+      {/* Activities List */}
       {!isLoading && !error && (
         <div>
           {activities.length === 0 ? (
-            <p>No activities found for this athlete.</p> // Message for empty list
+            <p style={styles.loadingText}>
+              No activities found for this athlete.
+            </p> // Reuse loading style for empty message
           ) : (
-            // Use an unordered list for semantic structure
-            <ul style={{ listStyle: "none", padding: 0 }}>
+            <ul style={styles.activityList}>
               {activities.map((act) => (
-                // List item for each activity
-                <li
-                  key={act.activity_id} // Use the unique activity_id from DB as key
-                  style={{
-                    border: "1px solid #ddd", // Slightly softer border
-                    padding: "15px",
-                    marginBottom: "10px",
-                    borderRadius: "5px",
-                    backgroundColor: "#fff", // White background
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)", // Subtle shadow
-                  }}
-                >
-                  {/* Activity Title and Type */}
-                  <h4
-                    style={{
-                      marginTop: 0,
-                      marginBottom: "10px",
-                      color: "#333",
-                    }}
-                  >
+                <li key={act.activity_id} style={styles.activityListItem}>
+                  <h4 style={styles.activityTitle}>
                     {act.name || `Activity ${act.activity_id}`} (
-                    {act.type || "Unknown Type"})
+                    {act.type || "Unknown"})
                   </h4>
-                  {/* Activity Date */}
-                  <p
-                    style={{
-                      margin: "5px 0",
-                      fontSize: "0.9em",
-                      color: "#555",
-                    }}
-                  >
-                    <strong>Date:</strong> {formatDate(act.start_date_local)}
+                  <p style={styles.activityDate}>
+                    {formatDate(act.start_date_local)}
                   </p>
-                  {/* Grid for Key Metrics */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fill, minmax(130px, 1fr))", // Adjust min width as needed
-                      gap: "10px 15px", // Row and column gap
-                      marginTop: "10px",
-                      fontSize: "0.95em",
-                    }}
-                  >
-                    {/* Display key metrics using formatted values from backend */}
-                    <div title={`Distance: ${act.distance} meters`}>
-                      {" "}
-                      {/* Add title for raw data */}
-                      <strong>Dist:</strong> {act.distance_km || "N/A"} km
-                    </div>
-                    <div title={`Moving Time: ${act.moving_time} seconds`}>
-                      <strong>Time:</strong> {act.moving_time_formatted}
-                    </div>
-                    <div>
-                      <strong>Pace:</strong> {act.pace_per_km}
-                    </div>
-                    <div title={`Avg HR: ${act.average_heartrate}`}>
-                      <strong>Avg HR:</strong> {act.average_heartrate_formatted}
+                  {/* Stats Grid */}
+                  <div style={styles.statsGrid}>
+                    <div
+                      style={styles.statItem}
+                      title={`Distance: ${act.distance} meters`}
+                    >
+                      <span style={styles.statLabel}>Dist:</span>{" "}
+                      {act.distance_km || "N/A"} km
                     </div>
                     <div
+                      style={styles.statItem}
+                      title={`Moving Time: ${act.moving_time} seconds`}
+                    >
+                      <span style={styles.statLabel}>Time:</span>{" "}
+                      {act.moving_time_formatted}
+                    </div>
+                    <div style={styles.statItem}>
+                      <span style={styles.statLabel}>Pace:</span>{" "}
+                      {act.pace_per_km}
+                    </div>
+                    <div
+                      style={styles.statItem}
+                      title={`Avg HR: ${act.average_heartrate}`}
+                    >
+                      <span style={styles.statLabel}>Avg HR:</span>{" "}
+                      {act.average_heartrate_formatted}
+                    </div>
+                    <div
+                      style={styles.statItem}
+                      title={`Max HR: ${act.max_heartrate}`}
+                    >
+                      <span style={styles.statLabel}>Max HR:</span>{" "}
+                      {act.max_heartrate
+                        ? `${act.max_heartrate.toFixed(0)} bpm`
+                        : "N/A"}
+                    </div>
+                    <div
+                      style={styles.statItem}
                       title={`Elevation Gain: ${act.total_elevation_gain} meters`}
                     >
-                      <strong>Elev Gain:</strong>{" "}
+                      <span style={styles.statLabel}>Elev Gain:</span>{" "}
                       {act.total_elevation_gain !== null &&
                       !isNaN(act.total_elevation_gain)
                         ? `${act.total_elevation_gain.toFixed(0)} m`
                         : "N/A"}
                     </div>
-                    {/* Add max HR, calories etc. if desired and available */}
-                    <div title={`Max HR: ${act.max_heartrate}`}>
-                      <strong>Max HR:</strong>{" "}
-                      {act.max_heartrate
-                        ? `${act.max_heartrate.toFixed(0)} bpm`
-                        : "N/A"}
-                    </div>
-                    <div>
-                      <strong>Calories:</strong> {act.calories || "N/A"}
-                    </div>
+                    {/* Add calories back if you add the column to DB later */}
+                    {/* <div style={styles.statItem}>
+                       <span style={styles.statLabel}>Calories:</span> {act.calories || 'N/A'}
+                     </div> */}
                   </div>
-                  {/* Display Mental State (Read-only for coach) */}
+                  {/* Mental State Section */}
                   {(act.mental_mood ||
                     act.mental_focus ||
                     act.mental_stress ||
                     act.mental_notes) && (
-                    <div
-                      style={{
-                        marginTop: "15px",
-                        paddingTop: "10px",
-                        borderTop: "1px dashed #ccc",
-                        fontSize: "0.9em",
-                        color: "#666", // Slightly darker than default text
-                        backgroundColor: "#fafafa", // Subtle background
-                        padding: "8px",
-                        borderRadius: "3px",
-                      }}
-                    >
-                      <strong
-                        style={{
-                          color: "#444",
-                          display: "block",
-                          marginBottom: "5px",
-                        }}
-                      >
-                        Athlete's Mental State Log:
-                      </strong>
-                      <span style={{ marginRight: "10px" }}>
+                    <div style={styles.mentalStateSection}>
+                      <span style={styles.mentalStateTitle}>
+                        Athlete's Log:
+                      </span>
+                      <span style={styles.mentalStateItem}>
                         {act.mental_mood ? `Mood: ${act.mental_mood}/5` : ""}
                       </span>
-                      <span style={{ marginRight: "10px" }}>
+                      <span style={styles.mentalStateItem}>
                         {act.mental_focus ? `Focus: ${act.mental_focus}/5` : ""}
                       </span>
-                      <span>
+                      <span style={styles.mentalStateItem}>
                         {act.mental_stress
                           ? `Stress: ${act.mental_stress}/5`
                           : ""}
                       </span>
                       {act.mental_notes && (
-                        <p
-                          style={{
-                            marginTop: "8px",
-                            marginBottom: 0,
-                            whiteSpace: "pre-wrap", // Preserve line breaks/spacing
-                            fontStyle: "italic",
-                            borderLeft: "3px solid #eee",
-                            paddingLeft: "8px",
-                          }}
-                        >
-                          "{act.mental_notes}"
-                        </p>
+                        <p style={styles.mentalNotes}>"{act.mental_notes}"</p>
                       )}
                     </div>
                   )}
@@ -251,4 +299,4 @@ const AthleteActivityListPage = () => {
   );
 };
 
-export default AthleteActivityListPage; // Ensure default export
+export default AthleteActivityListPage;

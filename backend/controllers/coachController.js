@@ -335,7 +335,6 @@ exports.getAthleteActivities = async (req, res, next) => {
                 max_speed,            -- Meters/second (as 'real')
                 average_heartrate,    -- BPM (as 'real')
                 max_heartrate,        -- BPM (as 'real')
-                calories,             -- (Assuming this column exists, wasn't explicitly in dump but is common)
                 mental_mood,          -- 1-5 integer
                 mental_focus,         -- 1-5 integer
                 mental_stress,        -- 1-5 integer
