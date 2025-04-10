@@ -52,6 +52,38 @@ router.get(
   coachController.getAthleteActivities // Map to the new controller function
 );
 
+// GET /api/coaches/athletes/:athleteId/diary (Coach views specific athlete's diary)
+router.get(
+  "/athletes/:athleteId/diary", // New path for diary entries
+  authenticateToken,
+  checkRole(["coach"]), // Ensure only coaches can call this
+  coachController.getAthleteDiaryEntries // Map to the new controller function
+);
+
+// GET /api/coaches/athletes/:athleteId/diet (Coach views specific athlete's diet logs)
+router.get(
+  "/athletes/:athleteId/diet", // New path for diet logs
+  authenticateToken,
+  checkRole(["coach"]), // Coach only
+  coachController.getAthleteDietLogs // Map to the new controller function
+);
+
+// Coach creates a training note for an athlete
+router.post(
+  "/athletes/:athleteId/training_notes",
+  authenticateToken,
+  checkRole(["coach"]),
+  coachController.createTrainingNote
+);
+
+// Coach views training notes sent to an athlete
+router.get(
+  "/athletes/:athleteId/training_notes",
+  authenticateToken,
+  checkRole(["coach"]),
+  coachController.getAthleteTrainingNotes
+);
+
 // Delete/Revoke link (can be done by coach or athlete)
 // Authenticated user must be part of the link
 router.delete("/link/:linkId", authenticateToken, coachController.revokeLink);

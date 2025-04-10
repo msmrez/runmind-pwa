@@ -100,6 +100,13 @@ const Dashboard = () => {
   const [isLoadingGoals, setIsLoadingGoals] = useState(true); // Start loading true
   const [goalsError, setGoalsError] = useState("");
   const [isStravaConnected, setIsStravaConnected] = useState(false); // Start false
+  const [myCoaches, setMyCoaches] = useState([]);
+  const [isLoadingCoaches, setIsLoadingCoaches] = useState(false); // Optional loading state
+  const [coachesError, setCoachesError] = useState("");
+  const [myTrainingNotes, setMyTrainingNotes] = useState([]);
+  const [isLoadingMyTrainingNotes, setIsLoadingMyTrainingNotes] =
+    useState(true); // Start loading
+  const [myTrainingNotesError, setMyTrainingNotesError] = useState("");
 
   // --- Use useCallback for Fetch Functions ---
   const fetchStoredActivities = useCallback(async () => {
@@ -176,6 +183,62 @@ const Dashboard = () => {
     } finally {
       setIsLoadingGoals(false);
       console.log("[Dashboard] fetchActiveGoals - Finished");
+    }
+  }, []); // Empty dependency array
+
+  const fetchMyCoaches = useCallback(async () => {
+    console.log("[Dashboard] fetchMyCoaches - Called");
+    setIsLoadingCoaches(true); // Optional
+    setCoachesError("");
+    setMyCoaches([]); // Clear previous
+    try {
+      // Assuming the endpoint exists as defined in your coaches.js routes
+      const response = await apiClient.get("/api/coaches/mycoaches", {
+        params: { status: "accepted" }, // Ensure we only get accepted coaches
+      });
+      setMyCoaches(response.data || []);
+      console.log("[Dashboard] fetchMyCoaches - Success");
+    } catch (error) {
+      console.error("[Dashboard] fetchMyCoaches - Error:", error);
+      if (error.response?.status !== 401 && error.response?.status !== 403) {
+        setCoachesError(
+          `Failed load coaches: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
+      setMyCoaches([]);
+    } finally {
+      setIsLoadingCoaches(false); // Optional
+      console.log("[Dashboard] fetchMyCoaches - Finished");
+    }
+  }, []); // Empty dependency array
+
+  const fetchMyTrainingNotes = useCallback(async () => {
+    console.log("[Dashboard] fetchMyTrainingNotes - Called");
+    setIsLoadingMyTrainingNotes(true);
+    setMyTrainingNotesError("");
+    setMyTrainingNotes([]); // Clear previous
+    try {
+      // Use the endpoint created for athletes fetching their notes
+      // Confirm path is correct based on your users.js route setup
+      const response = await apiClient.get("/api/users/training_notes");
+      setMyTrainingNotes(response.data || []);
+      console.log("[Dashboard] fetchMyTrainingNotes - Success");
+    } catch (error) {
+      console.error("[Dashboard] fetchMyTrainingNotes - Error:", error);
+      if (error.response?.status !== 401 && error.response?.status !== 403) {
+        setMyTrainingNotesError(
+          `Failed load training notes: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
+      // Note: 403 shouldn't happen if checkRole(['runner']) is correct on backend
+      setMyTrainingNotes([]);
+    } finally {
+      setIsLoadingMyTrainingNotes(false);
+      console.log("[Dashboard] fetchMyTrainingNotes - Finished");
     }
   }, []); // Empty dependency array
 
@@ -282,6 +345,12 @@ const Dashboard = () => {
       fetchStoredActivities();
       fetchInsights();
       fetchActiveGoals();
+      // <<< --- Conditionally fetch coaches IF user is a runner --- >>>
+      if (userInfo.role === "runner") {
+        fetchMyCoaches();
+        fetchMyTrainingNotes();
+      }
+      // <<< --- End conditional fetch --- >>>
     } else {
       console.log(
         "[Dashboard Data Fetch Effect] Skipping fetch - userInfo not available."
@@ -292,7 +361,14 @@ const Dashboard = () => {
       setIsLoadingGoals(false);
     }
     // Depend on userInfo. Re-running fetch functions doesn't add value here as they are stable references from useCallback([])
-  }, [userInfo, fetchStoredActivities, fetchInsights, fetchActiveGoals]); // Depend on userInfo and fetch functions
+  }, [
+    userInfo,
+    fetchStoredActivities,
+    fetchInsights,
+    fetchActiveGoals,
+    fetchMyCoaches,
+    fetchMyTrainingNotes,
+  ]); // Depend on userInfo and fetch functions
 
   // Format date helper
   const formatDate = (dateString) => {
@@ -500,11 +576,80 @@ const Dashboard = () => {
         )}
       </div>
 
+      {/* <<< --- NEW Training Notes Section for Athlete --- >>> */}
+      <div className="dashboard-card training-notes-section">
+        <h4>Training Notes from Coach</h4>
+        {isLoadingMyTrainingNotes && <p>Loading notes...</p>}
+        {myTrainingNotesError && (
+          <p className="error-text">{myTrainingNotesError}</p>
+        )}
+        {!isLoadingMyTrainingNotes &&
+          !myTrainingNotesError &&
+          myTrainingNotes.length === 0 && (
+            <p>No training notes received from your coach yet.</p>
+          )}
+        {!isLoadingMyTrainingNotes &&
+          !myTrainingNotesError &&
+          myTrainingNotes.length > 0 && (
+            <ul className="training-notes-list">
+              {myTrainingNotes.map((note) => (
+                <li key={note.note_id} className="training-notes-item">
+                  <div className="note-header">
+                    <span className="note-date">
+                      {formatDate(note.note_date, false)}
+                    </span>{" "}
+                    {/* Date only */}
+                    <span className="note-coach">
+                      From: {note.coach_first_name || "Coach"}{" "}
+                      {note.coach_last_name || ""}
+                    </span>
+                  </div>
+                  <p className="note-instructions">{note.instructions}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+      {/* <<< --- End NEW Training Notes Section --- >>> */}
+
       {/* Coach Link Request Form (Only for runners) */}
       {userInfo && userInfo.role === "runner" && (
         <CoachLinkRequest userId={userInfo.appUserId} /> // Render if runner
       )}
 
+      {/* <<< --- NEW My Coaches Section (Only for runners) --- >>> */}
+      {userInfo && userInfo.role === "runner" && (
+        <div className="dashboard-card my-coaches-section">
+          <h4>My Coaches</h4>
+          {isLoadingCoaches && <p>Loading coaches...</p>}
+          {coachesError && <p className="error-text">{coachesError}</p>}
+          {!isLoadingCoaches && !coachesError && myCoaches.length === 0 && (
+            <p>You are not currently linked with any coaches.</p>
+          )}
+          {!isLoadingCoaches && !coachesError && myCoaches.length > 0 && (
+            <ul className="my-coaches-list">
+              {myCoaches.map((coach) => (
+                <li key={coach.coach_user_id} className="my-coaches-item">
+                  {" "}
+                  {/* Use coach_user_id */}
+                  {coach.first_name || "Coach"}{" "}
+                  {coach.last_name || coach.coach_user_id} {/* Display name */}
+                  {coach.email && (
+                    <span className="coach-email"> ({coach.email})</span>
+                  )}{" "}
+                  {/* Display email */}
+                  {/* Potential future action:
+                  <button onClick={() => handleRevokeLink(coach.link_id)} className="revoke-button">
+                    Revoke Link
+                  </button>
+                  */}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {/* <<< --- End NEW My Coaches Section --- >>> */}
       {/* Chart Section */}
       {isStravaConnected &&
         !isLoadingActivities &&
@@ -616,6 +761,7 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+      
     </div> // End dashboard-container
   );
 };

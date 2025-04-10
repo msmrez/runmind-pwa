@@ -10,7 +10,7 @@ import GoalsPage from "./components/GoalsPage";
 import LoginPage from "./components/LoginPage";
 import RegisterPage from "./components/RegisterPage";
 import CoachDashboard from "./components/CoachDashboard";
-import AthleteActivityListPage from "./components/AthleteActivityListPage";
+import AthleteActivityListPage from "./components/AthleteDetailPage";
 
 // Removed HomePage import, defined below
 import "./App.css";

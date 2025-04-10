@@ -415,3 +415,272 @@ exports.getAthleteActivities = async (req, res, next) => {
     next(error); // Pass error to the centralized error handler
   }
 };
+
+/**
+ * @desc    Get diary entries for a specific linked athlete
+ * @route   GET /api/coaches/athletes/:athleteId/diary
+ * @access  Private/Coach
+ */
+exports.getAthleteDiaryEntries = async (req, res, next) => {
+  const coachUserId = req.user.userId; // Coach making the request
+  const { athleteId } = req.params; // Athlete whose diary is requested
+
+  const athleteIdInt = parseInt(athleteId, 10);
+  if (isNaN(athleteIdInt)) {
+    return res.status(400).json({ message: "Invalid Athlete ID provided." });
+  }
+
+  console.log(
+    `[Ctrl-getAthleteDiary] Coach ${coachUserId} requesting diary for Athlete ${athleteIdInt}`
+  );
+
+  try {
+    // 1. Security Check: Verify the coach-athlete link is 'accepted'
+    //    (This is identical to the check in getAthleteActivities)
+    const linkCheckQuery = `
+            SELECT 1 FROM coach_athlete_links
+            WHERE coach_user_id = $1 AND athlete_user_id = $2 AND status = 'accepted';
+        `;
+    const linkCheck = await db.query(linkCheckQuery, [
+      coachUserId,
+      athleteIdInt,
+    ]);
+
+    if (linkCheck.rowCount === 0) {
+      console.warn(
+        `[Ctrl-getAthleteDiary] Auth Failure: Coach ${coachUserId} not linked/accepted for Athlete ${athleteIdInt}`
+      );
+      return res
+        .status(403) // Forbidden
+        .json({ message: "Not authorized to view this athlete's diary." });
+    }
+    console.log(
+      `[Ctrl-getAthleteDiary] Authorization successful for Coach ${coachUserId} -> Athlete ${athleteIdInt}`
+    );
+
+    // 2. Fetch Diary Entries for the specified athlete
+    //    Select relevant columns from the diary_entries table
+    const diaryQuery = `
+            SELECT
+                entry_id,       -- Primary Key
+                user_id,        -- Should match athleteIdInt
+                entry_date,     -- Date of the entry
+                notes,          -- The text content
+                created_at,     -- When the entry was created
+                updated_at      -- When it was last updated
+            FROM diary_entries
+            WHERE user_id = $1  -- Filter by the athlete's user_id
+            ORDER BY entry_date DESC; -- Show most recent date first
+        `;
+    const { rows: diaryEntries } = await db.query(diaryQuery, [athleteIdInt]);
+    console.log(
+      `[Ctrl-getAthleteDiary] Found ${diaryEntries.length} diary entries for Athlete ${athleteIdInt}`
+    );
+
+    // 3. Send the diary entries back to the client
+    //    No complex processing needed here unless you want to format dates server-side
+    res.status(200).json(diaryEntries);
+  } catch (error) {
+    console.error("[Ctrl-getAthleteDiary] Error:", error);
+    next(error); // Pass error to the global error handler
+  }
+};
+
+/**
+ * @desc    Get diet logs for a specific linked athlete
+ * @route   GET /api/coaches/athletes/:athleteId/diet
+ * @access  Private/Coach
+ */
+exports.getAthleteDietLogs = async (req, res, next) => {
+  const coachUserId = req.user.userId; // Coach making the request
+  const { athleteId } = req.params; // Athlete whose diet logs are requested
+
+  const athleteIdInt = parseInt(athleteId, 10);
+  if (isNaN(athleteIdInt)) {
+    return res.status(400).json({ message: "Invalid Athlete ID provided." });
+  }
+
+  console.log(
+    `[Ctrl-getAthleteDiet] Coach ${coachUserId} requesting diet logs for Athlete ${athleteIdInt}`
+  );
+
+  try {
+    // 1. Security Check: Verify the coach-athlete link is 'accepted'
+    //    (Reusing the same proven check)
+    const linkCheckQuery = `
+            SELECT 1 FROM coach_athlete_links
+            WHERE coach_user_id = $1 AND athlete_user_id = $2 AND status = 'accepted';
+        `;
+    const linkCheck = await db.query(linkCheckQuery, [
+      coachUserId,
+      athleteIdInt,
+    ]);
+
+    if (linkCheck.rowCount === 0) {
+      console.warn(
+        `[Ctrl-getAthleteDiet] Auth Failure: Coach ${coachUserId} not linked/accepted for Athlete ${athleteIdInt}`
+      );
+      return res
+        .status(403) // Forbidden
+        .json({ message: "Not authorized to view this athlete's diet logs." });
+    }
+    console.log(
+      `[Ctrl-getAthleteDiet] Authorization successful for Coach ${coachUserId} -> Athlete ${athleteIdInt}`
+    );
+
+    // 2. Fetch Diet Logs for the specified athlete
+    //    Select relevant columns from the diet_logs table
+    const dietQuery = `
+            SELECT
+                log_id,             -- Primary Key
+                user_id,            -- Should match athleteIdInt
+                log_date,           -- Date of the log
+                meal_type,          -- e.g., Breakfast, Lunch, Snack
+                description,        -- Text description of the meal
+                estimated_calories,
+                estimated_protein,
+                estimated_carbs,
+                estimated_fat,
+                created_at,         -- When the log was created
+                updated_at          -- When it was last updated
+            FROM diet_logs
+            WHERE user_id = $1      -- Filter by the athlete's user_id
+            ORDER BY log_date DESC, created_at DESC; -- Show most recent date/entry first
+        `;
+    const { rows: dietLogs } = await db.query(dietQuery, [athleteIdInt]);
+    console.log(
+      `[Ctrl-getAthleteDiet] Found ${dietLogs.length} diet logs for Athlete ${athleteIdInt}`
+    );
+
+    // 3. Send the diet logs back to the client
+    res.status(200).json(dietLogs);
+  } catch (error) {
+    console.error("[Ctrl-getAthleteDiet] Error:", error);
+    next(error); // Pass error to the global error handler
+  }
+};
+
+/**
+ * @desc    Coach creates a training note for a linked athlete
+ * @route   POST /api/coaches/athletes/:athleteId/training_notes
+ * @access  Private/Coach
+ */
+exports.createTrainingNote = async (req, res, next) => {
+  const coachUserId = req.user.userId; // Coach making the request
+  const { athleteId } = req.params;
+  const { noteDate, instructions } = req.body; // Expect date (YYYY-MM-DD) and text
+
+  const athleteIdInt = parseInt(athleteId, 10);
+  if (isNaN(athleteIdInt)) {
+    return res.status(400).json({ message: "Invalid Athlete ID." });
+  }
+  if (!noteDate || !instructions || instructions.trim() === "") {
+    return res
+      .status(400)
+      .json({ message: "Note date and instructions are required." });
+  }
+
+  console.log(
+    `[Ctrl-createTrainingNote] Coach ${coachUserId} creating note for Athlete ${athleteIdInt} on ${noteDate}`
+  );
+
+  try {
+    // 1. Security Check: Verify the coach-athlete link is 'accepted'
+    const linkCheckQuery = `
+        SELECT 1 FROM coach_athlete_links
+        WHERE coach_user_id = $1 AND athlete_user_id = $2 AND status = 'accepted';
+    `;
+    const linkCheck = await db.query(linkCheckQuery, [
+      coachUserId,
+      athleteIdInt,
+    ]);
+
+    if (linkCheck.rowCount === 0) {
+      console.warn(
+        `[Ctrl-createTrainingNote] Auth Failure: Coach ${coachUserId} not linked/accepted for Athlete ${athleteIdInt}`
+      );
+      return res
+        .status(403)
+        .json({ message: "Not authorized to create notes for this athlete." });
+    }
+
+    // 2. Insert the training note
+    const insertQuery = `
+            INSERT INTO training_notes (coach_user_id, athlete_user_id, note_date, instructions)
+            VALUES ($1, $2, $3, $4)
+            RETURNING note_id, note_date, instructions;
+        `;
+    const { rows } = await db.query(insertQuery, [
+      coachUserId,
+      athleteIdInt,
+      noteDate,
+      instructions,
+    ]);
+    console.log(
+      `[Ctrl-createTrainingNote] Note created (ID: ${rows[0].note_id})`
+    );
+    res
+      .status(201)
+      .json({ message: "Training note created successfully.", note: rows[0] });
+  } catch (error) {
+    console.error("[Ctrl-createTrainingNote] Error:", error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Coach views training notes sent to a specific linked athlete
+ * @route   GET /api/coaches/athletes/:athleteId/training_notes
+ * @access  Private/Coach
+ */
+exports.getAthleteTrainingNotes = async (req, res, next) => {
+  const coachUserId = req.user.userId; // Coach making the request
+  const { athleteId } = req.params;
+
+  const athleteIdInt = parseInt(athleteId, 10);
+  if (isNaN(athleteIdInt)) {
+    return res.status(400).json({ message: "Invalid Athlete ID." });
+  }
+
+  console.log(
+    `[Ctrl-getAthleteTrainingNotes] Coach ${coachUserId} requesting notes for Athlete ${athleteIdInt}`
+  );
+
+  try {
+    // 1. Security Check: Verify the coach-athlete link is 'accepted'
+    const linkCheckQuery = `
+            SELECT 1 FROM coach_athlete_links
+            WHERE coach_user_id = $1 AND athlete_user_id = $2 AND status = 'accepted';
+        `;
+    const linkCheck = await db.query(linkCheckQuery, [
+      coachUserId,
+      athleteIdInt,
+    ]);
+
+    if (linkCheck.rowCount === 0) {
+      console.warn(
+        `[Ctrl-getAthleteTrainingNotes] Auth Failure: Coach ${coachUserId} not linked/accepted for Athlete ${athleteIdInt}`
+      );
+      return res
+        .status(403)
+        .json({ message: "Not authorized to view notes for this athlete." });
+    }
+
+    // 2. Fetch training notes sent *by this coach* to *this athlete*
+    const notesQuery = `
+            SELECT note_id, note_date, instructions, created_at, updated_at
+            FROM training_notes
+            WHERE coach_user_id = $1 AND athlete_user_id = $2
+            ORDER BY note_date DESC, created_at DESC;
+        `;
+    const { rows: notes } = await db.query(notesQuery, [
+      coachUserId,
+      athleteIdInt,
+    ]);
+    console.log(`[Ctrl-getAthleteTrainingNotes] Found ${notes.length} notes.`);
+    res.status(200).json(notes);
+  } catch (error) {
+    console.error("[Ctrl-getAthleteTrainingNotes] Error:", error);
+    next(error);
+  }
+};

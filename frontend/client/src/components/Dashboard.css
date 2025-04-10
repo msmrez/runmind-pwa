@@ -122,3 +122,103 @@
   font-size: 0.8em !important; /* Smaller button in table */
   padding: 2px 5px !important;
 }
+
+/* --- Styles for My Coaches Section --- */
+.my-coaches-section {
+  /* Use similar styling as other cards */
+}
+
+.my-coaches-section h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #555; /* Example color */
+}
+
+.my-coaches-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.my-coaches-item {
+  padding: 8px 0;
+  border-bottom: 1px dashed #eee; /* Separator line */
+  display: flex; /* Align items nicely */
+  justify-content: space-between; /* Push button to right if added */
+  align-items: center;
+}
+
+.my-coaches-item:last-child {
+  border-bottom: none; /* No line on last item */
+}
+
+.coach-email {
+  font-size: 0.9em;
+  color: #777;
+  margin-left: 5px;
+}
+
+/* Example style for a future revoke button */
+.revoke-button {
+  padding: 3px 8px;
+  font-size: 0.8em;
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.revoke-button:hover {
+  background-color: #c0392b;
+}
+
+/* --- Styles for Athlete's Training Notes Section --- */
+.training-notes-section {
+  /* Similar card style */
+}
+
+.training-notes-section h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #16a085; /* Teal color for training notes */
+}
+
+.training-notes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.training-notes-item {
+  background-color: #f8f9fa; /* Light background for each note */
+  border: 1px solid #eee;
+  border-left: 4px solid #16a085; /* Accent border */
+  padding: 12px 15px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
+
+.training-notes-item .note-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-weight: bold;
+  font-size: 0.95em;
+}
+
+.training-notes-item .note-date {
+  color: #333;
+}
+
+.training-notes-item .note-coach {
+  color: #777;
+  font-weight: normal;
+  font-size: 0.9em;
+}
+
+.training-notes-item .note-instructions {
+  margin: 0;
+  line-height: 1.5;
+  color: #444;
+  white-space: pre-wrap; /* Preserve formatting */
+}
