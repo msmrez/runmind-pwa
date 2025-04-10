@@ -408,6 +408,23 @@ const Dashboard = () => {
   const backendUrl =
     process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
 
+  // --- Add these logs right BEFORE the return statement ---
+  console.log("[Dashboard Render Check] UserInfo available:", !!userInfo);
+  console.log("[Dashboard Render Check] isStravaConnected:", isStravaConnected);
+  console.log(
+    "[Dashboard Render Check] isLoadingActivities:",
+    isLoadingActivities
+  );
+  console.log(
+    "[Dashboard Render Check] chartActivities defined:",
+    !!chartActivities
+  );
+  console.log(
+    "[Dashboard Render Check] chartActivities.length:",
+    chartActivities?.length
+  ); // Use optional chaining just in case
+  // --- End of added logs ---
+
   return (
     <div className="dashboard-container">
       {/* Header */}
@@ -761,7 +778,6 @@ const Dashboard = () => {
           </div>
         )}
       </div>
-      
     </div> // End dashboard-container
   );
 };

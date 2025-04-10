@@ -1,19 +1,17 @@
 // src/components/TrendsChart.js
-import React from "react";
-// Import Line chart type and necessary components from Chart.js
+import React, { useMemo } from "react"; // Import useMemo
 import { Line } from "react-chartjs-2";
 import {
-  Chart as ChartJS, // Import the Chart object
-  CategoryScale, // For X axis (labels like dates)
-  LinearScale, // For Y axis (numerical values like distance)
-  PointElement, // For drawing points on the line
-  LineElement, // For drawing the line itself
-  Title, // For the chart title
-  Tooltip, // For showing info on hover
-  Legend, // For the dataset label (e.g., "Distance (km)")
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
 } from "chart.js";
 
-// VERY IMPORTANT: Register the components Chart.js needs to draw this type of chart
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -24,114 +22,157 @@ ChartJS.register(
   Legend
 );
 
-// The React component for the chart
 const TrendsChart = ({
-  activities = [], // Default to empty array if no activities prop is passed
-  dataKey = "distance_km", // The key in the activity object to plot on Y axis (default: distance)
-  label = "Trend", // Default label for the dataset
+  activities = [],
+  dataKey = "distance_km",
+  label = "Total Daily", // Updated default label
 }) => {
-  // Ensure activities is an array before processing
-  if (!Array.isArray(activities) || activities.length === 0) {
-    // Optionally return null or a placeholder if there's no data
+  // --- <<< START: Aggregate data per day using useMemo WITH DEBUG LOGS >>> ---
+  const aggregatedChartData = useMemo(() => {
+    if (!Array.isArray(activities) || activities.length === 0) {
+      return { labels: [], dataPoints: [] };
+    }
+    // <<< LOG 1: Log the received props >>>
+    console.log(
+      `[TrendsChart Debug] Aggregating ${activities.length} activities. dataKey prop: "${dataKey}"`
+    );
+    // <<< LOG 2: Log the first activity object to see its structure >>>
+    if (activities.length > 0) {
+      console.log(
+        "[TrendsChart Debug] First activity structure:",
+        JSON.stringify(activities[0])
+      );
+    }
+
+    const dailyTotals = new Map();
+
+    activities.forEach((act, index) => {
+      // Add index for logging
+      try {
+        const dateStr = new Date(act.start_date_local)
+          .toISOString()
+          .split("T")[0];
+        const value = act[dataKey];
+        const numericValue = parseFloat(value);
+        if (isNaN(numericValue)) {
+          console.warn(
+            `[TrendsChart Debug] Could not parse value "${value}" for dataKey "${dataKey}". Treating as 0.`
+          );
+          numericValue = 0; // Treat non-parsable values as 0
+        }
+
+        // <<< LOG 3: Log processing for each activity (or sample) >>>
+        if (index < 5 || index === activities.length - 1) {
+          // Log first 5 and last
+          console.log(
+            `[TrendsChart Debug] Processing act[${index}]: date=${dateStr}, dataKey="${dataKey}", rawValue=${JSON.stringify(
+              value
+            )}, numericValue=${numericValue}`
+          );
+        }
+
+        if (dailyTotals.has(dateStr)) {
+          dailyTotals.set(dateStr, dailyTotals.get(dateStr) + numericValue);
+        } else {
+          dailyTotals.set(dateStr, numericValue);
+        }
+      } catch (e) {
+        console.error(
+          `[TrendsChart Debug] Error processing activity index ${index}:`,
+          act,
+          e
+        );
+      }
+    });
+
+    // Convert Map to sorted array
+    const sortedDailyData = Array.from(dailyTotals.entries())
+      .map(([date, totalValue]) => ({
+        date: date,
+        value: parseFloat(totalValue.toFixed(2)),
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Extract labels and data points
+    const chartLabels = sortedDailyData.map((item) => {
+      try {
+        const dateObj = new Date(`${item.date}T00:00:00`);
+        return dateObj.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        });
+      } catch {
+        return item.date;
+      }
+    });
+    const chartDataPoints = sortedDailyData.map((item) => item.value);
+
+    // <<< LOG 4: Log the final aggregated result >>>
+    console.log("[TrendsChart Debug] Final Labels:", chartLabels);
+    console.log("[TrendsChart Debug] Final Data Points:", chartDataPoints);
+
+    return { labels: chartLabels, dataPoints: chartDataPoints };
+  }, [activities, dataKey]);
+  // --- <<< END: Aggregate data per day using useMemo WITH DEBUG LOGS >>> ---
+  // Check if enough *aggregated* data points exist
+  if (aggregatedChartData.labels.length < 2) {
     return (
       <p style={{ textAlign: "center", color: "#888" }}>
-        Not enough data for chart.
+        Not enough daily data points for chart.
       </p>
     );
-    // return null;
   }
 
-  // Prepare data for the chart
-  // Chart.js expects labels (X axis) and data points (Y axis)
-  // We often want to show time progression, so we reverse the activities
-  // (since our API returns newest first) to show oldest -> newest on the chart.
-  const reversedActivities = activities.slice().reverse();
-
-  // Extract Y axis values using the dataKey prop
-  // Ensure values are numbers, default to 0 if data is missing/invalid for a point
-  const chartDataPoints = reversedActivities.map((act) => {
-    const value = act[dataKey];
-    // Attempt to parse as float, default to 0 if null, undefined, or not a number
-    const numberValue = parseFloat(value);
-    return !isNaN(numberValue) ? numberValue : 0;
-  });
-
-  // Extract X axis labels (e.g., short date representation)
-  const chartLabels = reversedActivities.map((act) => {
-    try {
-      // Format date like "Jan 8"
-      return new Date(act.start_date_local).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return "N/A"; // Handle invalid dates
-    }
-  });
-
-  // Chart.js data structure
+  // Chart.js data structure using aggregated data
   const data = {
-    labels: chartLabels, // Labels for the X axis
+    labels: aggregatedChartData.labels, // Use aggregated labels
     datasets: [
       {
-        label: label, // Label for this line/dataset (passed as prop)
-        data: chartDataPoints, // Data points for the Y axis
-        fill: false, // Don't fill area under the line
-        borderColor: "rgb(52, 152, 219)", // Line color (example: blue)
-        backgroundColor: "rgba(52, 152, 219, 0.5)", // Point color (optional)
-        tension: 0.1, // Makes the line slightly curved
-        pointRadius: 3, // Size of points on the line
-        pointHoverRadius: 5, // Size on hover
+        label: `${label} (${dataKey})`, // Make label more descriptive
+        data: aggregatedChartData.dataPoints, // Use aggregated data points
+        fill: false,
+        borderColor: "rgb(52, 152, 219)",
+        backgroundColor: "rgba(52, 152, 219, 0.5)",
+        tension: 0.1,
+        pointRadius: 4, // Slightly larger points might look better with fewer points
+        pointHoverRadius: 6,
       },
-      // You could add more datasets here later (e.g., a line for average heart rate)
-      // {
-      //   label: 'Avg Heart Rate',
-      //   data: reversedActivities.map(act => act.average_heartrate || 0),
-      //   borderColor: 'rgb(231, 76, 60)', // Example red color
-      //   tension: 0.1,
-      //   yAxisID: 'y1', // Assign to a secondary Y axis if needed
-      // }
     ],
   };
 
-  // Chart.js options structure for configuration
+  // Chart.js options structure (mostly unchanged, but update titles)
   const options = {
-    responsive: true, // Chart takes width of container
-    maintainAspectRatio: false, // Allows chart to resize height based on container
+    responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: "top", // Show legend above the chart
+        position: "top",
       },
       title: {
-        display: true, // Show title
-        text: `${label} Trend (Last ${activities.length} Activities)`, // Dynamic title
-        padding: {
-          bottom: 15, // Add some space below title
-        },
+        display: true,
+        // Title reflects daily aggregation and number of days plotted
+        text: `${label} Trend (${aggregatedChartData.labels.length} Days)`,
+        padding: { bottom: 15 },
       },
       tooltip: {
         callbacks: {
-          // Customize what the tooltip shows on hover
+          // Tooltip callback can remain similar, maybe update label context
           label: function (context) {
             let tooltipLabel = context.dataset.label || "";
             if (tooltipLabel) {
               tooltipLabel += ": ";
             }
             if (context.parsed.y !== null) {
-              // Add units automatically based on common labels (can be improved)
+              // Simple unit detection - can be refined
               let unit = "";
-              if (label.toLowerCase().includes("distance")) unit = " km";
-              else if (label.toLowerCase().includes("pace"))
-                unit = " /km"; // Future use maybe
-              else if (label.toLowerCase().includes("time"))
-                unit = " s"; // If plotting time
+              if (dataKey.toLowerCase().includes("distance")) unit = " km";
+              else if (dataKey.toLowerCase().includes("time"))
+                unit = " s"; // Assuming seconds if plotting time
               else if (
-                label.toLowerCase().includes("hr") ||
-                label.toLowerCase().includes("heart")
+                dataKey.toLowerCase().includes("hr") ||
+                dataKey.toLowerCase().includes("heart")
               )
                 unit = " bpm";
-              // Add more units as needed
-
               tooltipLabel += context.parsed.y + unit;
             }
             return tooltipLabel;
@@ -140,40 +181,20 @@ const TrendsChart = ({
       },
     },
     scales: {
-      // Configure axes
       x: {
-        title: {
-          display: false, // No need for explicit "Date" title usually
-          text: "Date",
-        },
+        title: { display: false },
       },
       y: {
-        // Primary Y axis configuration
         title: {
-          display: true, // Show Y axis title
-          text: label, // Use the main label prop as Y axis title
+          display: true,
+          text: `${label} (${dataKey})`, // Y-axis title
         },
-        beginAtZero: true, // Start Y axis at 0, good for distance/time
-        // You might set this to false for things like pace where 0 isn't meaningful
+        beginAtZero: true,
       },
-      // Example of a secondary Y axis (if you add another dataset like HR)
-      // y1: {
-      //     type: 'linear',
-      //     display: true,
-      //     position: 'right', // Position on the right
-      //     title: {
-      //         display: true,
-      //         text: 'Avg Heart Rate (bpm)'
-      //     },
-      //     grid: { // Prevent grid lines from overlapping
-      //         drawOnChartArea: false,
-      //     },
-      // },
     },
   };
 
-  // Render the Line chart component with options and data
   return <Line options={options} data={data} />;
 };
 
-export default TrendsChart; // Export the component for use in Dashboard.js
+export default TrendsChart;
