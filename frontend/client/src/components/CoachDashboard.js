@@ -1,8 +1,7 @@
 // src/components/CoachDashboard.js
 import React, { useState, useEffect, useCallback } from "react";
 import apiClient from "../api"; // Use centralized API client
-// Removed Navigate as not used currently
-// Removed useAuth as using localStorage directly
+import { Link } from "react-router-dom";
 
 const CoachDashboard = () => {
   const [requests, setRequests] = useState([]);
@@ -138,6 +137,13 @@ const CoachDashboard = () => {
     );
   // Show loading while user info is checked
   if (!userInfo) return <p>Loading...</p>;
+  if (error)
+    return (
+      <p style={{ color: "red", padding: "20px" }}>
+        {error} <Link to="/login">Login?</Link>
+      </p>
+    );
+
   // This check is redundant if error state is set correctly, but safe
   if (userInfo.role !== "coach")
     return <p style={{ color: "red", padding: "20px" }}>Access Denied.</p>;
@@ -146,10 +152,14 @@ const CoachDashboard = () => {
   return (
     <div style={{ padding: "20px" }}>
       <h2>Coach Dashboard</h2>
-      <p>Welcome, Coach {userInfo?.firstname}!</p>
-
+      <p>
+        Welcome, Coach {userInfo?.firstname || userInfo?.username || "User"}!
+      </p>{" "}
+      {/* Use fallback name */}
+      {/* --- Pending Athlete Requests Section (Keep as is) --- */}
       <div style={{ marginTop: "20px", marginBottom: "20px" }}>
         <h3>Pending Athlete Requests</h3>
+        {/* ... existing rendering for requests ... */}
         {loadingRequests && <p>Loading requests...</p>}
         {!loadingRequests && requests.length === 0 && (
           <p>No pending requests.</p>
@@ -159,47 +169,40 @@ const CoachDashboard = () => {
             {requests.map((req) => (
               <li
                 key={req.link_id}
-                style={{
-                  border: "1px solid #eee",
-                  padding: "10px",
-                  marginBottom: "5px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
+                style={
+                  {
+                    /* ... existing styles ... */
+                  }
+                }
               >
+                {/* ... existing request info and buttons ... */}
                 <span>
-                  {req.athlete_first_name} {req.athlete_last_name} (
+                  {req.athlete_first_name || "Athlete"}{" "}
+                  {req.athlete_last_name || req.athlete_user_id} (
                   {req.athlete_email})
                 </span>
                 <div>
-                  {" "}
-                  {/* Button group */}
                   <button
                     onClick={() => handleRequestUpdate(req.link_id, "accepted")}
-                    style={{
-                      marginLeft: "10px",
-                      backgroundColor: "green",
-                      color: "white",
-                      border: "none",
-                      padding: "5px 8px",
-                      cursor: "pointer",
-                    }}
+                    style={
+                      {
+                        /* ... */
+                      }
+                    }
                   >
-                    Accept
+                    {" "}
+                    Accept{" "}
                   </button>
                   <button
                     onClick={() => handleRequestUpdate(req.link_id, "declined")}
-                    style={{
-                      marginLeft: "5px",
-                      backgroundColor: "red",
-                      color: "white",
-                      border: "none",
-                      padding: "5px 8px",
-                      cursor: "pointer",
-                    }}
+                    style={
+                      {
+                        /* ... */
+                      }
+                    }
                   >
-                    Decline
+                    {" "}
+                    Decline{" "}
                   </button>
                 </div>
               </li>
@@ -207,7 +210,7 @@ const CoachDashboard = () => {
           </ul>
         )}
       </div>
-
+      {/* === MODIFIED 'Your Athletes' SECTION === */}
       <div style={{ marginTop: "20px" }}>
         <h3>Your Athletes</h3>
         {loadingAthletes && <p>Loading athletes...</p>}
@@ -217,22 +220,42 @@ const CoachDashboard = () => {
         {!loadingAthletes && athletes.length > 0 && (
           <ul style={{ listStyle: "none", padding: 0 }}>
             {athletes.map((ath) => (
+              // Use athlete_user_id from your controller/schema as the key
               <li
-                key={ath.user_id}
+                key={ath.athlete_user_id}
                 style={{
                   border: "1px solid #eee",
                   padding: "10px",
                   marginBottom: "5px",
                 }}
               >
-                {ath.first_name} {ath.last_name} ({ath.email})
-                {/* Add Revoke button/link later */}
-                {/* Add link to athlete's data view later */}
+                {/* Wrap the athlete info in a Link pointing to the new route */}
+                <Link
+                  to={`/coach/athlete/${ath.athlete_user_id}/activities`} // <-- Updated route path
+                  // Pass athlete's name via location state for display on the next page
+                  state={{
+                    athleteName: `${ath.first_name || "Athlete"} ${
+                      ath.last_name || ath.athlete_user_id
+                    }`,
+                  }}
+                  style={{
+                    textDecoration: "none",
+                    color: "#007bff",
+                    fontWeight: "bold",
+                  }} // Style link
+                >
+                  {/* Display athlete's name and email */}
+                  {ath.first_name || "Athlete"}{" "}
+                  {ath.last_name || ath.athlete_user_id} ({ath.email})
+                </Link>
+                {/* Maybe add a revoke button here later, calling revokeLink controller */}
+                {/* Example: <button onClick={() => handleRevoke(ath.link_id)} style={{ marginLeft: '15px', ...}}>Revoke</button> */}
               </li>
             ))}
           </ul>
         )}
       </div>
+      {/* === END MODIFIED 'Your Athletes' SECTION === */}
     </div>
   );
 };

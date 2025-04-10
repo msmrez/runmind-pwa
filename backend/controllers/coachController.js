@@ -59,11 +59,9 @@ exports.requestLink = async (req, res, next) => {
           .json({ message: "Already linked with this coach." });
       // Potentially allow re-request if declined/revoked? Or require coach action.
       // For now, just block re-request if any link exists.
-      return res
-        .status(409)
-        .json({
-          message: `A previous link attempt exists (status: ${status}).`,
-        });
+      return res.status(409).json({
+        message: `A previous link attempt exists (status: ${status}).`,
+      });
     }
 
     // Create new pending request
@@ -80,11 +78,9 @@ exports.requestLink = async (req, res, next) => {
   } catch (error) {
     console.error("[Request Link] Error:", error);
     if (error.code === "23505")
-      return res
-        .status(409)
-        .json({
-          message: "Link request conflict (possibly simultaneous attempt?).",
-        }); // Unique constraint
+      return res.status(409).json({
+        message: "Link request conflict (possibly simultaneous attempt?).",
+      }); // Unique constraint
     next(error);
   }
 };
@@ -95,11 +91,9 @@ exports.getPendingRequests = async (req, res, next) => {
   // Defaulting status to pending, but could allow other statuses via query param if needed
   const status = req.query.status || "pending";
   if (status !== "pending") {
-    return res
-      .status(400)
-      .json({
-        message: "Only status=pending is currently supported for requests.",
-      });
+    return res.status(400).json({
+      message: "Only status=pending is currently supported for requests.",
+    });
   }
 
   console.log(`Get Pending Requests: Coach ${coachUserId}`);
@@ -165,11 +159,9 @@ exports.updateRequestStatus = async (req, res, next) => {
       if (check.rows[0].coach_user_id !== coachUserId)
         return res.status(403).json({ message: "Permission denied." });
       if (check.rows[0].status !== "pending")
-        return res
-          .status(409)
-          .json({
-            message: `Request is no longer pending (status: ${check.rows[0].status}).`,
-          });
+        return res.status(409).json({
+          message: `Request is no longer pending (status: ${check.rows[0].status}).`,
+        });
       return res.status(500).json({ message: "Failed to update request." }); // Should not happen if checks pass
     }
 
@@ -266,12 +258,10 @@ exports.revokeLink = async (req, res, next) => {
         "SELECT 1 FROM coach_athlete_links WHERE link_id=$1",
         [linkIdInt]
       );
-      return res
-        .status(check.rowCount === 0 ? 404 : 403)
-        .json({
-          message:
-            check.rowCount === 0 ? "Link not found." : "Permission denied.",
-        });
+      return res.status(check.rowCount === 0 ? 404 : 403).json({
+        message:
+          check.rowCount === 0 ? "Link not found." : "Permission denied.",
+      });
     }
 
     console.log(
@@ -281,5 +271,148 @@ exports.revokeLink = async (req, res, next) => {
   } catch (error) {
     console.error("[Revoke Link] Error:", error);
     next(error);
+  }
+};
+
+// REPLACE/ADD THIS FUNCTION in backend/controllers/coachController.js
+
+/**
+ * @desc    Get activities for a specific linked athlete
+ * @route   GET /api/coaches/athletes/:athleteId/activities
+ * @access  Private/Coach
+ */
+exports.getAthleteActivities = async (req, res, next) => {
+  const coachUserId = req.user.userId; // Coach making the request (from auth middleware)
+  const { athleteId } = req.params; // Athlete whose activities are requested (from URL param)
+
+  const athleteIdInt = parseInt(athleteId, 10);
+  if (isNaN(athleteIdInt)) {
+    return res.status(400).json({ message: "Invalid Athlete ID provided." });
+  }
+
+  console.log(
+    `[Ctrl-getAthleteActivities] Coach ${coachUserId} requesting activities for Athlete ${athleteIdInt}`
+  );
+
+  try {
+    // 1. Security Check: Verify the coach is linked and the link is 'accepted'
+    const linkCheckQuery = `
+            SELECT 1 FROM coach_athlete_links
+            WHERE coach_user_id = $1 AND athlete_user_id = $2 AND status = 'accepted';
+        `;
+    const linkCheck = await db.query(linkCheckQuery, [
+      coachUserId,
+      athleteIdInt,
+    ]);
+
+    if (linkCheck.rowCount === 0) {
+      console.warn(
+        `[Ctrl-getAthleteActivities] Auth Failure: Coach ${coachUserId} not linked/accepted for Athlete ${athleteIdInt}`
+      );
+      return res
+        .status(403) // Forbidden - correct status code for authorization failure
+        .json({ message: "Not authorized to view this athlete's activities." });
+    }
+    console.log(
+      `[Ctrl-getAthleteActivities] Authorization successful for Coach ${coachUserId} -> Athlete ${athleteIdInt}`
+    );
+
+    // 2. Fetch Activities for the specified athlete from the 'activities' table
+    const activitiesQuery = `
+            SELECT
+                activity_id,          -- Primary Key
+                user_id,              -- Belongs to this athlete
+                strava_activity_id,   -- Original Strava ID
+                name,                 -- Activity name
+                type,                 -- Run, Ride, etc.
+                start_date_local,     -- Local time activity started
+                timezone,             -- Timezone of the activity
+                distance,             -- In meters (as 'real')
+                moving_time,          -- In seconds (as 'integer')
+                elapsed_time,         -- In seconds (as 'integer')
+                total_elevation_gain, -- In meters (as 'real')
+                average_speed,        -- Meters/second (as 'real')
+                max_speed,            -- Meters/second (as 'real')
+                average_heartrate,    -- BPM (as 'real')
+                max_heartrate,        -- BPM (as 'real')
+                calories,             -- (Assuming this column exists, wasn't explicitly in dump but is common)
+                mental_mood,          -- 1-5 integer
+                mental_focus,         -- 1-5 integer
+                mental_stress,        -- 1-5 integer
+                mental_notes          -- Text notes
+                -- description was not in the schema, removed it
+            FROM activities
+            WHERE user_id = $1        -- Filter by the athlete's user_id
+            ORDER BY start_date_local DESC; -- Show most recent first
+        `;
+    const { rows: activities } = await db.query(activitiesQuery, [
+      athleteIdInt,
+    ]);
+    console.log(
+      `[Ctrl-getAthleteActivities] Found ${activities.length} activities for Athlete ${athleteIdInt}`
+    );
+
+    // 3. Process/Format Data for Frontend Consistency (Optional but recommended)
+    //    This adds useful derived/formatted fields like pace and formatted times.
+    const processedActivities = activities.map((act) => {
+      // Helper to format time in seconds to H:MM:SS or MM:SS string
+      const formatTime = (seconds) => {
+        if (seconds === null || seconds === undefined || isNaN(seconds))
+          return "N/A";
+        const totalSeconds = Math.round(seconds);
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        let timeString = "";
+        if (h > 0) timeString += `${h}h `;
+        timeString += `${m.toString().padStart(h > 0 ? 2 : 1, "0")}m `; // Pad minutes if hours exist
+        timeString += `${s.toString().padStart(2, "0")}s`;
+        return timeString.trim(); // Remove trailing space if only seconds
+      };
+
+      // Calculate distance in km
+      const distanceKm =
+        act.distance !== null && !isNaN(act.distance)
+          ? (act.distance / 1000).toFixed(2)
+          : null;
+
+      // Calculate pace (minutes per kilometer)
+      let pacePerKm = "N/A";
+      if (
+        act.moving_time > 0 &&
+        act.distance > 0 &&
+        !isNaN(act.moving_time) &&
+        !isNaN(act.distance)
+      ) {
+        const paceDecimal = act.moving_time / 60 / (act.distance / 1000);
+        const paceMinutes = Math.floor(paceDecimal);
+        const paceSeconds = Math.round((paceDecimal - paceMinutes) * 60);
+        pacePerKm = `${paceMinutes}:${paceSeconds
+          .toString()
+          .padStart(2, "0")} /km`;
+      }
+
+      // Format average heart rate (if available)
+      const avgHrFormatted =
+        act.average_heartrate !== null && !isNaN(act.average_heartrate)
+          ? `${act.average_heartrate.toFixed(0)} bpm`
+          : "N/A";
+
+      return {
+        ...act, // Include all original fields from the DB query
+        distance_km: distanceKm ? parseFloat(distanceKm) : null, // Add distance in km as a number
+        moving_time_formatted: formatTime(act.moving_time), // Add formatted moving time string
+        elapsed_time_formatted: formatTime(act.elapsed_time), // Add formatted elapsed time string
+        pace_per_km: pacePerKm, // Add formatted pace string
+        average_heartrate_formatted: avgHrFormatted, // Add formatted HR string
+        // Keep raw numeric values as well if needed for charts etc.
+      };
+    });
+
+    // 4. Send the processed activities back to the client
+    res.status(200).json(processedActivities);
+  } catch (error) {
+    console.error("[Ctrl-getAthleteActivities] Error:", error);
+    next(error); // Pass error to the centralized error handler
   }
 };

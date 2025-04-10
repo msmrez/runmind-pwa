@@ -10,6 +10,8 @@ import GoalsPage from "./components/GoalsPage";
 import LoginPage from "./components/LoginPage";
 import RegisterPage from "./components/RegisterPage";
 import CoachDashboard from "./components/CoachDashboard";
+import AthleteActivityListPage from "./components/AthleteActivityListPage";
+
 // Removed HomePage import, defined below
 import "./App.css";
 
@@ -296,6 +298,18 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            {/* --- <<< ADD THIS NEW ROUTE >>> --- */}
+            <Route
+              path="/coach/athlete/:athleteId/activities" // More specific path is good practice
+              element={
+                <ProtectedRoute allowedRoles={["coach"]}>
+                  {" "}
+                  {/* Coach only */}
+                  <AthleteActivityListPage /> {/* Render the new component */}
+                </ProtectedRoute>
+              }
+            />
+            {/* --- <<< END OF NEW ROUTE >>> --- */}
             {/* 404 Catch-all */}
             <Route
               path="*"

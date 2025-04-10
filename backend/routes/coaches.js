@@ -44,6 +44,14 @@ router.get(
   coachController.getMyCoaches
 ); // Example for athlete
 
+// GET /api/coaches/athletes/:athleteId/activities (Coach views specific athlete's runs)
+router.get(
+  "/athletes/:athleteId/activities",
+  authenticateToken,
+  checkRole(["coach"]), // Ensure only coaches can call this
+  coachController.getAthleteActivities // Map to the new controller function
+);
+
 // Delete/Revoke link (can be done by coach or athlete)
 // Authenticated user must be part of the link
 router.delete("/link/:linkId", authenticateToken, coachController.revokeLink);
