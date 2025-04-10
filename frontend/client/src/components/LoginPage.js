@@ -1,82 +1,64 @@
 // src/components/LoginPage.js
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import apiClient from "../api";
+// --- Use apiClient ---
+import apiClient from "../api"; // Adjust path if needed
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const isLoggedIn = !!localStorage.getItem("authToken"); // Check if already logged in
+  const isLoggedIn = !!localStorage.getItem("authToken");
 
-  // Redirect if already logged in
   useEffect(() => {
-    if (isLoggedIn) {
-      console.log(
-        "[LoginPage] User already logged in, redirecting to dashboard."
-      );
-      navigate("/dashboard");
-    }
+    if (isLoggedIn) navigate("/dashboard");
   }, [isLoggedIn, navigate]);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-    setError(""); // Clear error on change
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-
     if (!formData.email || !formData.password) {
       setError("Email and Password are required.");
       return;
     }
-
     setIsLoading(true);
     try {
-      console.log("[LoginPage] Attempting login for:", formData.email);
-      // Make POST request to backend login route
-      const response = await apiClient.post("/auth/login", {
-        email: formData.email,
-        password: formData.password,
-      });
+      console.log("[LoginPage] Attempting login:", formData.email);
+      // --- Use apiClient ---
+      // No token needed for login request itself
+      const response = await apiClient.post("/auth/login", formData);
+      console.log("[LoginPage] Success:", response.data);
 
-      console.log("[LoginPage] Login successful:", response.data);
-
-      // --- CRITICAL STEP: Store Token and User Info ---
-      if (response.data && response.data.token && response.data.user) {
-        // Store the JWT using the key the interceptor expects
+      if (response.data?.token && response.data?.user) {
         localStorage.setItem("authToken", response.data.token);
-        // Store user info (excluding token, password) for easy display access
-        // Ensure this matches the structure expected by Dashboard/other components
+        // Store user info (make sure key matches what Dashboard reads)
         localStorage.setItem(
           "stravaAthlete",
           JSON.stringify(response.data.user)
-        ); // Re-using 'stravaAthlete' key, might rename later
-        console.log("[LoginPage] Token and user info stored in localStorage.");
+        );
+        console.log("[LoginPage] Token/User stored.");
 
-        // Redirect to the dashboard upon successful login
-        navigate("/dashboard");
+        // --- Force App Reload to update global state ---
+        // This is simpler than context/props drilling for now
+        window.location.href =
+          response.data.user.role === "coach"
+            ? "/coach/dashboard"
+            : "/dashboard";
+        // navigate(response.data.user.role === 'coach' ? '/coach/dashboard' : '/dashboard'); // navigate might not refresh App state
       } else {
-        // This shouldn't happen if backend sends correct response, but good to check
-        console.error("[LoginPage] Login response missing token or user data.");
-        setError("Login failed: Invalid response from server.");
+        throw new Error("Login response missing token or user data.");
       }
-      // --- END CRITICAL STEP ---
     } catch (err) {
-      console.error(
-        "[LoginPage] Login error:",
-        err.response?.data || err.message
-      );
+      console.error("[LoginPage] Error:", err.response?.data || err.message);
       setError(
         `Login failed: ${err.response?.data?.message || "Server error"}`
       );
-      // Clear potential stale tokens if login fails
       localStorage.removeItem("authToken");
       localStorage.removeItem("stravaAthlete");
     } finally {
@@ -84,7 +66,6 @@ const LoginPage = () => {
     }
   };
 
-  // Don't render form if redirecting
   if (isLoggedIn) return <p>Redirecting...</p>;
 
   return (
@@ -101,8 +82,9 @@ const LoginPage = () => {
       <form onSubmit={handleSubmit}>
         {error && <p style={{ color: "red" }}>{error}</p>}
         <div style={{ marginBottom: "10px" }}>
+          {" "}
           <label htmlFor="email">Email:</label>
-          <br />
+          <br />{" "}
           <input
             type="email"
             id="email"
@@ -110,12 +92,13 @@ const LoginPage = () => {
             value={formData.email}
             onChange={handleChange}
             required
-            style={{ width: "95%" }}
-          />
+            style={{ width: "95%", padding: "8px" }}
+          />{" "}
         </div>
         <div style={{ marginBottom: "15px" }}>
+          {" "}
           <label htmlFor="password">Password:</label>
-          <br />
+          <br />{" "}
           <input
             type="password"
             id="password"
@@ -123,22 +106,24 @@ const LoginPage = () => {
             value={formData.password}
             onChange={handleChange}
             required
-            style={{ width: "95%" }}
-          />
+            style={{ width: "95%", padding: "8px" }}
+          />{" "}
         </div>
         <button
           type="submit"
           disabled={isLoading}
           style={{ padding: "10px 15px" }}
         >
-          {isLoading ? "Logging In..." : "Login"}
+          {" "}
+          {isLoading ? "Logging In..." : "Login"}{" "}
         </button>
       </form>
       <p style={{ marginTop: "15px" }}>
-        Don't have an account? <Link to="/register">Register</Link>
+        {" "}
+        Don't have an account? <Link to="/register">Register</Link>{" "}
       </p>
-      {/* Add link for Strava login if you keep that separate */}
       <p style={{ marginTop: "10px" }}>
+        {" "}
         Or{" "}
         <a
           href={
@@ -146,12 +131,11 @@ const LoginPage = () => {
             "/strava/authorize"
           }
         >
-          Connect with Strava
-        </a>
-        {/* Note: Need to handle linking Strava-only users to email/pass later */}
+          {" "}
+          Connect with Strava{" "}
+        </a>{" "}
       </p>
     </div>
   );
 };
-
 export default LoginPage;

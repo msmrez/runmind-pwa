@@ -1,138 +1,85 @@
 // src/components/StravaCallback.js
 import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import axios from "axios"; // Use plain axios for this one-off call (no prior auth token)
+import axios from "axios"; // Use raw axios for this one call as apiClient interceptor might interfere if no token exists initially
 
-const StravaCallback = () => {
+const StravaCallback = (/* { onAuthSuccess } */) => {
+  // Accept callback if needed
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const code = searchParams.get("code");
   const error = searchParams.get("error");
-  const [status, setStatus] = useState("Processing Strava callback...");
-  // We don't necessarily need athleteData state if we just store and navigate
-  // const [athleteData, setAthleteData] = useState(null);
+  const [status, setStatus] = useState("Processing Strava connection...");
   const processingRef = useRef(false);
 
   useEffect(() => {
-    console.log("[StravaCallback] useEffect running.");
     if (error) {
-      console.error("[StravaCallback] Strava authorization error:", error);
-      setStatus(`Error: ${error}. Please try again or log in manually.`);
-      processingRef.current = false;
-      // Clear potentially bad tokens if user denied access etc.
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("stravaAthlete");
-      return;
+      /* ... handle error ... */ return;
     }
 
     if (code && !processingRef.current) {
       processingRef.current = true;
-      console.log("[StravaCallback] Authorization Code found:", code);
-      setStatus("Exchanging code for session token...");
-
+      setStatus("Exchanging code with backend...");
       const backendUrl =
         process.env.REACT_APP_BACKEND_URL || "http://localhost:5001";
-      console.log(
-        `[StravaCallback] POSTing code to ${backendUrl}/strava/token`
-      );
 
-      // Use plain axios for the token exchange itself
+      // Use raw axios POST to /strava/token
       axios
-        .post(`${backendUrl}/strava/token`, { code }) // Send code in body
+        .post(`${backendUrl}/strava/token`, { code })
         .then((response) => {
-          console.log(
-            "[StravaCallback] Backend response successful:",
-            response.data
-          );
+          console.log("[StravaCallback] Backend response:", response.data);
 
-          // --- Expect token AND user object ---
-          if (
-            response.data &&
-            response.data.token &&
-            response.data.user &&
-            response.data.user.appUserId
-          ) {
-            setStatus("Strava authentication successful! Redirecting...");
+          // --- Store Token and User Info ---
+          if (response.data?.token && response.data?.user) {
+            localStorage.setItem("authToken", response.data.token);
+            localStorage.setItem(
+              "stravaAthlete",
+              JSON.stringify(response.data.user)
+            ); // Store user info
+            console.log("[StravaCallback] Token and User Info Saved.");
+            setStatus("Strava connection successful! Redirecting...");
 
-            // --- Store Token (as 'authToken') ---
-            const receivedToken = response.data.token;
-            console.log(
-              "%c[StravaCallback] Storing authToken...",
-              "color: green;",
-              receivedToken ? "Token Received" : "TOKEN MISSING!"
-            );
-            localStorage.setItem("authToken", receivedToken);
+            // Notify App state if using prop/context callback
+            // if (onAuthSuccess) onAuthSuccess(true, response.data.user);
 
-            // --- Store User Info (as 'stravaAthlete') ---
-            // Ensure the object has the fields your app expects (like appUserId)
-            const userToStore = response.data.user;
-            // --- LOG THE OBJECT BEFORE STORING ---
-            console.log(
-              '%c[StravaCallback] OBJECT TO BE STORED in localStorage["stravaAthlete"]:',
-              "color: purple; font-weight: bold;",
-              JSON.stringify(userToStore, null, 2)
-            ); // Log prettified JSON
-            // --- END LOG ---
-            console.log(
-              "%c[StravaCallback] Storing user info (stravaAthlete)...",
-              "color: green;",
-              userToStore
-            );
-            localStorage.setItem("stravaAthlete", JSON.stringify(userToStore));
-
-            // --- Log verification (Optional) ---
-            console.log(
-              "[StravaCallback] Verifying storage:",
-              localStorage.getItem("authToken"),
-              localStorage.getItem("stravaAthlete")
-            );
-
-            // Redirect to the dashboard upon successful login/token storage
-            console.log(
-              "[StravaCallback] Storage successful. Navigating to dashboard..."
-            );
-            navigate("/dashboard", { replace: true }); // Use replace
+            // --- Force reload to update App state ---
+            window.location.href =
+              response.data.user.role === "coach"
+                ? "/coach/dashboard"
+                : "/dashboard";
+            // navigate(response.data.user.role === 'coach' ? '/coach/dashboard' : '/dashboard');
           } else {
             console.error(
-              "%c[StravaCallback] Backend response missing token, user, or appUserId!",
-              "color: red;",
-              response.data
+              "[StravaCallback] Backend response missing token or user."
             );
-            setStatus(
-              "Authentication Error: Invalid session data received from server."
-            );
-            localStorage.removeItem("authToken"); // Clear bad state
+            setStatus("Connection error: Invalid response from server.");
+            localStorage.removeItem("authToken"); // Clear partial data
             localStorage.removeItem("stravaAthlete");
-            processingRef.current = false; // Allow potential retry?
           }
           // --- End Store ---
         })
         .catch((err) => {
           console.error(
-            "[StravaCallback] Error POSTing code to backend:",
+            "[StravaCallback] Error during backend token exchange:",
             err.response?.data || err.message
           );
           setStatus(
-            `Authentication Error: ${
-              err.response?.data?.message || err.message
-            }`
+            `Connection failed: ${err.response?.data?.message || err.message}`
           );
-          localStorage.removeItem("authToken"); // Clear on error
+          localStorage.removeItem("authToken");
           localStorage.removeItem("stravaAthlete");
-          processingRef.current = false;
         });
-    } else if (!code && !error && !processingRef.current) {
-      console.log("[StravaCallback] No code/error found yet.");
-      setStatus("Waiting for Strava authorization...");
+      // No finally for processingRef here, let redirect handle it
+    } else if (!code && !error) {
+      setStatus("Waiting for Strava code...");
     }
-  }, [code, error, navigate]); // Dependencies
+  }, [code, error, navigate /*, onAuthSuccess */]); // Add onAuthSuccess if using callback
 
   return (
     <div>
-      <h1>Strava Authentication</h1>
+      <h1>Connecting with Strava...</h1>
       <p>{status}</p>
-      {/* Don't need to display athlete data here if redirecting */}
-      {/* {athleteData && <p>Redirecting...</p>} */}
+      {/* Maybe add a manual redirect link if auto-redirect fails */}
     </div>
   );
 };

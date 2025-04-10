@@ -14,6 +14,37 @@ const goalTypes = [
   { value: "monthly_runs", label: "Monthly Runs", unit: "runs" },
 ];
 
+// --- CoachLinkRequest Component (Now uses apiClient) ---
+const CoachLinkRequest = ({ userId }) => { // userId might not be strictly needed if apiClient handles auth
+    const [coachEmail, setCoachEmail] = useState('');
+    const [requestStatus, setRequestStatus] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleRequest = async () => {
+         if (!coachEmail) { setRequestStatus('Please enter coach email.'); return; }
+         setIsLoading(true); setRequestStatus('Sending request...');
+         try {
+             // Use apiClient - token added automatically
+             const response = await apiClient.post('/api/coaches/link/request', { coachEmail });
+             setRequestStatus(response.data.message || 'Request sent!');
+             setCoachEmail('');
+         } catch (err) { console.error("Link request error:", err); setRequestStatus(`Error: ${err.response?.data?.message || 'Failed request.'}`); }
+         finally { setIsLoading(false); }
+    };
+
+    return ( /* ... JSX for the coach link form ... */
+        <div className="dashboard-card">
+            <h4>Link with a Coach</h4>
+            <div style={{display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+                <input type="email" value={coachEmail} onChange={(e) => setCoachEmail(e.target.value)} placeholder="Coach's email address" disabled={isLoading} style={{flexGrow:1, padding:'8px'}} />
+                <button onClick={handleRequest} disabled={isLoading} style={{padding:'8px 12px'}}> {isLoading ? 'Sending...' : 'Request Link'} </button>
+            </div>
+             {requestStatus && <p style={{marginTop:'10px', fontStyle:'italic'}}>{requestStatus}</p>}
+        </div>
+     );
+};
+// --- End CoachLinkRequest ---
+
 // --- Main Dashboard Component ---
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -154,6 +185,60 @@ const Dashboard = () => {
     }
   };
 
+  const CoachLinkRequest = () => {
+    const [coachEmail, setCoachEmail] = useState("");
+    const [requestStatus, setRequestStatus] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleRequest = async () => {
+      if (!coachEmail) {
+        setRequestStatus("Please enter coach email.");
+        return;
+      }
+      setIsLoading(true);
+      setRequestStatus("Sending request...");
+      try {
+        const response = await apiClient.post("/api/coaches/link/request", {
+          coachEmail,
+        });
+        setRequestStatus(response.data.message || "Request sent!");
+        setCoachEmail(""); // Clear input on success
+      } catch (err) {
+        setRequestStatus(
+          `Error: ${err.response?.data?.message || "Failed to send request."}`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    return (
+      <div className="dashboard-card">
+        {" "}
+        {/* Reuse card style */}
+        <h4>Link with a Coach</h4>
+        <input
+          type="email"
+          value={coachEmail}
+          onChange={(e) => setCoachEmail(e.target.value)}
+          placeholder="Coach's email address"
+          disabled={isLoading}
+        />
+        <button
+          onClick={handleRequest}
+          disabled={isLoading}
+          style={{ marginLeft: "10px" }}
+        >
+          {isLoading ? "Sending..." : "Request Link"}
+        </button>
+        {requestStatus && (
+          <p style={{ marginTop: "10px", fontStyle: "italic" }}>
+            {requestStatus}
+          </p>
+        )}
+      </div>
+    );
+  };
   // --- useEffect for Loading User Info and Initial Data ---
   useEffect(() => {
     console.log("[Dashboard] Mount effect running.");

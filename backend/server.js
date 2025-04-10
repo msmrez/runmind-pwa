@@ -15,6 +15,7 @@ const diaryRoutes = require("./routes/diary");
 const dietRoutes = require("./routes/diet");
 const goalRoutes = require("./routes/goals");
 const insightRoutes = require("./routes/insights");
+const coachRoutes = require("./routes/coaches");
 // --- End Route Imports ---
 
 const app = express();
@@ -35,6 +36,7 @@ app.use("/api/diary", diaryRoutes); // Mount diary routes (e.g., /api/diary)
 app.use("/api/diet", dietRoutes); // Mount diet routes (e.g., /api/diet)
 app.use("/api/goals", goalRoutes); // Mount goal routes (e.g., /api/goals)
 app.use("/api/insights", insightRoutes); // Mount insight routes (e.g., /api/insights)
+app.use("/api/coaches", coachRoutes);
 console.log("Routes mounted.");
 // --- End API Route Mounting ---
 
