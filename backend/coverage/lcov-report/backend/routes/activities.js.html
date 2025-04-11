@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>15/15</span>
+                <span class='fraction'>47/47</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>15/15</span>
+                <span class='fraction'>47/47</span>
             </div>
         
             
@@ -78,7 +78,71 @@
 <a name='L13'></a><a href='#L13'>13</a>
 <a name='L14'></a><a href='#L14'>14</a>
 <a name='L15'></a><a href='#L15'>15</a>
-<a name='L16'></a><a href='#L16'>16</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -96,16 +160,48 @@
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// backend/routes/activities.js
 const express = require("express");
 const activityController = require("../controllers/activityController");
+const commentController = require("../controllers/commentController"); // &lt;&lt;&lt; Make sure this path is correct
 const authenticateToken = require("../middleware/authenticateToken");
+// Remove checkRole import if not used directly here (checks are in controller)
+// const checkRole = require("../middleware/checkRole");
 const router = express.Router();
 &nbsp;
-// Apply middleware to all routes in this file
+// Apply authentication middleware to ALL activity-related routes
 router.use(authenticateToken);
 &nbsp;
-// Define routes
+// --- Existing Activity Routes ---
+// GET /api/activities (get user's own activities)
 router.get("/", activityController.getActivities);
+&nbsp;
+// GET /api/activities/:activityId (get specific activity details)
 router.get("/:activityId", activityController.getActivityDetail);
+&nbsp;
+// POST /api/activities/:activityId/mental_state (save mental state for an activity)
 router.post("/:activityId/mental_state", activityController.saveMentalState);
+&nbsp;
+// --- &lt;&lt;&lt; START: New Comment Routes for Activities &gt;&gt;&gt; ---
+&nbsp;
+// GET /api/activities/:activityId/comments (Get comments for this activity)
+router.get(
+  "/:activityId/comments",
+  // authenticateToken is already applied by router.use()
+  // Role/permission check happens inside commentController.getActivityComments
+  commentController.getActivityComments
+);
+&nbsp;
+// POST /api/activities/:activityId/comments (Add a comment to this activity)
+router.post(
+  "/:activityId/comments",
+  // authenticateToken is already applied by router.use()
+  // Role/permission check happens inside commentController.addCommentToActivity
+  commentController.addCommentToActivity
+);
+&nbsp;
+// Optional: DELETE route for comments could go here or in a separate /api/comments route
+// Example: router.delete('/:activityId/comments/:commentId', ...);
+// Or: router.delete('/comments/:commentId', ...); // (Would need a separate comments router)
+&nbsp;
+// --- &lt;&lt;&lt; END: New Comment Routes &gt;&gt;&gt; ---
 &nbsp;
 module.exports = router;
 &nbsp;</pre></td></tr></table></pre>
@@ -115,7 +211,7 @@ module.exports = router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-04-10T13:59:51.171Z
+                at 2025-04-11T10:21:25.633Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
