@@ -677,20 +677,28 @@ const Dashboard = () => {
       )}
       {/* <<< --- End NEW My Coaches Section --- >>> */}
       {/* Chart Section */}
-      {isStravaConnected &&
-        !isLoadingActivities &&
-        chartActivities.length > 1 && (
-          <div className="dashboard-card chart-card">
-            <h4>Recent Activity Trend</h4>
-            <div style={{ height: "250px", position: "relative" }}>
-              <TrendsChart
-                activities={chartActivities}
-                dataKey="distance_km"
-                label="Distance (km)"
-              />
-            </div>
+      {isStravaConnected && !isLoadingActivities && activities.length > 0 && (
+        <div className="dashboard-card chart-card">
+          <h4>Activity Trends</h4> {/* Updated title */}
+          <div style={{ height: "250px", position: "relative" }}>
+            <TrendsChart
+              activities={chartActivities} // Still pass original (sliced) activities
+              // Props for first metric (Left Axis)
+              dataKey1="distance_km"
+              label1="Distance (km)"
+              // Props for second metric (Right Axis)
+              dataKey2="average_heartrate"
+              label2="Avg HR (bpm)"
+            />
           </div>
-        )}
+        </div>
+      )}
+      {/* Loading Indicator */}
+      {isStravaConnected && isLoadingActivities && (
+        <div className="dashboard-card chart-card">
+          <p>Loading chart data...</p>
+        </div>
+      )}
       {/* Show loading indicator for chart if activities are loading */}
       {isStravaConnected && isLoadingActivities && (
         <div className="dashboard-card chart-card">
